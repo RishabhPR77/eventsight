@@ -57,17 +57,12 @@ class EventInput(BaseModel):
 
 # --- HELPER: ROBUST JSON EXTRACTOR ---
 def extract_json(text):
-    """Finds JSON object even if the model writes an essay around it."""
     try:
-        # 1. Try finding content between the first { and last }
         match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            return json.loads(match.group())
-        # 2. Try cleaning markdown if regex failed
+        if match: return json.loads(match.group())
         clean = text.replace("```json", "").replace("```", "").strip()
         return json.loads(clean)
-    except:
-        return None
+    except: return None
 
 def generate_smart_tips(data, attendance, cost_per_head, occupancy, roi_score, synergy_score):
     tips = []
@@ -94,24 +89,14 @@ def analyze_brand_inference(data: BrandInput):
         "high_synergy": ["Events"], "strategy_statement": "Maximize visibility."
     }
     
-    # SYSTEM PROMPT: Be Boring. Be Precise.
     system_prompt = "You are a backend JSON processor. Output ONLY valid JSON. No Markdown. No Intro."
-
-    prompt = f"""
-    Analyze Brand: {data.company_name} ({data.industry}). 
-    Return a JSON object with keys: "target_audience", "core_values", "persona", "high_synergy", "strategy_statement".
-    """
+    prompt = f"Analyze Brand: {data.company_name} ({data.industry}). Return JSON with keys: 'target_audience', 'core_values', 'persona', 'high_synergy', 'strategy_statement'."
     
     try:
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.2,   # <--- Low creativity = less chatting
-            max_tokens=1024    # <--- More space = no cutoff
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}, temperature=0.2, max_tokens=1024
         )
         parsed = extract_json(completion.choices[0].message.content)
         if parsed: ai_analysis.update(parsed)
@@ -122,7 +107,7 @@ def analyze_brand_inference(data: BrandInput):
 
 @app.post("/predict")
 def predict_sponsorship_final(data: EventInput):
-    # 1. ML PREDICTION
+    # 1. PREDICTION
     try:
         city_enc = le_city.transform([data.city])[0]
         event_enc = le_event.transform([data.event_type])[0]
@@ -140,6 +125,31 @@ def predict_sponsorship_final(data: EventInput):
     predicted_attendance = int(base_attendance * day_mult)
     predicted_attendance = max(10, min(predicted_attendance, data.venue_capacity))
 
+    # 2. REVENUE OPTIMIZER
+    price_options = [data.price * 0.8, data.price * 0.9, data.price, data.price * 1.1, data.price * 1.2]
+    best_price = data.price
+    max_revenue = predicted_attendance * data.price
+    optimization_msg = "✅ Your pricing is optimal for maximum revenue."
+
+    for p in price_options:
+        try:
+            temp_features = features.copy()
+            temp_features['price'] = p 
+            raw_att = model.predict(temp_features)[0]
+            adj_att = int(raw_att * day_mult)
+            adj_att = max(10, min(adj_att, data.venue_capacity))
+            rev = adj_att * p
+            if rev > max_revenue:
+                max_revenue = rev
+                best_price = p
+        except: pass
+
+    if best_price < data.price:
+        optimization_msg = f"📉 Opportunity: Lower price to ₹{int(best_price)} to capture volume. (Proj. Revenue: ₹{int(max_revenue):,})"
+    elif best_price > data.price:
+        optimization_msg = f"📈 Opportunity: Demand is high! You can raise price to ₹{int(best_price)}. (Proj. Revenue: ₹{int(max_revenue):,})"
+
+    # 3. METRICS
     cost_per_head = data.marketing_budget / predicted_attendance if predicted_attendance > 0 else 0
     occupancy = (predicted_attendance / data.venue_capacity) * 100
     
@@ -150,53 +160,42 @@ def predict_sponsorship_final(data: EventInput):
     else:
         roi_score = max(0, 60 - ((cost_per_head - acceptable_cost) * 0.5))
 
-    # 3. AI SYNERGY (The "Silenced" Version)
-    day_name = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][data.day_of_week]
+    # 4. AI AGENT (Negotiation + Email + Synergy)
+    system_prompt = "You are a Sponsorship Agent. Output ONLY valid JSON."
     
-    system_prompt = "You are a backend API. Output ONLY valid JSON. No reasoning. No explanations."
-
-    # ONE-SHOT PROMPT: Showing it exactly what to do
+    # NEW: We ask for Negotiation Tips & Email Draft
     prompt = f"""
-    Task: Calculate Synergy.
-    Brand: {data.sponsor_category}
-    Event: {data.event_type} in {data.city}
-    Context: {predicted_attendance} ppl, ₹{cost_per_head:.2f}/head.
+    Brand: {data.sponsor_category}. Event: {data.event_type} in {data.city}.
+    Stats: {predicted_attendance} ppl, ₹{cost_per_head:.2f}/head.
     
-    EXAMPLE OUTPUT:
-    {{
-        "synergy_score": 85,
-        "analysis": "Brand fits the demographic perfectly. Cost is efficient.",
-        "verdict": "HIGH POTENTIAL"
-    }}
+    Task:
+    1. Synergy Score (0-100).
+    2. Analysis (1 sentence).
+    3. Verdict (HIGH POTENTIAL / MODERATE / POOR FIT).
+    4. Two "Negotiation Points": {{"objection": "Their likely worry", "rebuttal": "Your winning answer"}}.
+    5. A "Cold Email": Subject line + Body (Short, professional, mentioning the stats).
 
-    YOUR OUTPUT (JSON ONLY):
+    Output Keys: "synergy_score", "analysis", "verdict", "negotiation_points" (list), "cold_email" (string).
     """
     
-    ai_resp = {"synergy_score": 50, "analysis": "AI busy. Using metrics.", "verdict": "MODERATE"}
+    ai_resp = {
+        "synergy_score": 50, "analysis": "Using logic metrics.", "verdict": "MODERATE", 
+        "negotiation_points": [{"objection": "Cost", "rebuttal": "ROI is high."}], 
+        "cold_email": "Error generating email."
+    }
 
     try:
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.2,   # <--- Stop the creativity
-            max_tokens=1024    # <--- Prevent cutoff
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}, temperature=0.4, max_tokens=1024
         )
         parsed = extract_json(completion.choices[0].message.content)
-        if parsed:
-            ai_resp = parsed
-        else:
-            print(f"⚠️ JSON Parse Failed. Raw: {completion.choices[0].message.content[:100]}...") 
-
-    except Exception as e:
-        print(f"❌ Prediction AI Error: {e}") 
+        if parsed: ai_resp = parsed
+    except Exception as e: print(f"❌ AI Error: {e}") 
 
     synergy_score = int(ai_resp.get("synergy_score", 50))
     final_score = int((synergy_score * 0.45) + (roi_score * 0.35) + (occupancy * 0.20))
-    
     verdict = ai_resp.get("verdict", "MODERATE").upper()
     if synergy_score < 40: verdict = "POOR FIT"
     elif final_score > 80: verdict = "HIGH POTENTIAL"
@@ -214,7 +213,10 @@ def predict_sponsorship_final(data: EventInput):
         },
         "tips": tips,
         "ai_analysis": ai_resp.get("analysis"),
-        "verdict": verdict
+        "verdict": verdict,
+        "optimization": optimization_msg,
+        "negotiation_points": ai_resp.get("negotiation_points", []), # <--- NEW
+        "cold_email": ai_resp.get("cold_email", "")                  # <--- NEW
     }
 
 if __name__ == "__main__":
