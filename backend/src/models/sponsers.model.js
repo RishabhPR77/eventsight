@@ -4,7 +4,6 @@ const sponsorSchema=new mongoose.Schema({
         type:mongoose.Schema.Types.ObjectId,
         ref:"User",
         required:true,
-        index:true,
         unique:true
     },
     brandName:{
@@ -31,7 +30,20 @@ const sponsorSchema=new mongoose.Schema({
     },
     logo:{
         type:String
+    },
+    brandKpi:{
+        type:String,
+        enum:["awareness","hybrid","leads","sales"],
+        required:true,
+        index:true
+    },
+    cityFocus:{
+        type:String,
+        enum:["all_mp","metro","tier2","pilgrimage"],
+        required:true,
+        index:true
     }
+
 },{timestamps:true})
 
 
