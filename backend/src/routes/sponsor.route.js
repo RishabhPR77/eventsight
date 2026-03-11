@@ -28,23 +28,4 @@ sponsorRoute.patch("/events/:id/feedback",verifyJwt,authorizeRole("sponsor"),upd
 // //predict
 sponsorRoute.get("/predict/:eventId", verifyJwt, authorizeRole("sponsor"), getPrediction)
  
-
-
-// //sponsor application
-// sponsorRoute.post("/events/:id/apply")   // apply karo
-// sponsorRoute.get("/applications/")  //apni saari applications dekho
-// sponsorRoute.get("/applications/:id")  // ek application detail (negotiation history)
-// sponsorRoute.post("/application/:id/negotiate")  // counter offer do
-//  sponsorRoute.get("/applications/:id/withdraw")   // withdraw karo
-
-
-
-// POST   /events/:id/feedback           // feedback do
-// GET    /events/:id/feedback           // apna feedback dekho
-
-// GET    /dashboard
-// // total applications, accepted, pending, 
-// // negotiating, total spent etc.
-
-
 module.exports={sponsorRoute}
