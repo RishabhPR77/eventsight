@@ -8,6 +8,7 @@ const { ApiResponse } = require("../utility/ApiResponse");
 const { asyncHandler } = require("../utility/AsyncHandler");
 const { uploadOnCloudinary } = require("../utility/cloudinary");
 const { eventCreate } = require("./organizer.controller");
+const {EventFeedBack}=require("../models/eventFeedBack.model")
 const axios = require("axios")
 
 const createSponsorProfile=asyncHandler(async(req,res)=>{

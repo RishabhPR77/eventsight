@@ -2,6 +2,7 @@ const express=require("express");
 const { verifyJwt } = require("../middleware/auth.middleware");
 const { authorizeRole } = require("../middleware/roleCheck");
 const { createSponsorProfile, getSponsorProfile, updateSponsorProfile, deleteSponsorProfile, giveFeedback, getMyFeedback, getEventById, getAllEvents, updateFeedback, getPrediction } = require("../controllers/sponsor.controller");
+const { upload } = require("../middleware/multer.middleware");
 
 const sponsorRoute=express.Router();
 
@@ -12,9 +13,9 @@ const sponsorRoute=express.Router();
 
 
 //sponsor profile
-sponsorRoute.post("/profileCreate",verifyJwt,authorizeRole("sponsor"),createSponsorProfile); //yaha pe photo vala bacha hai
+sponsorRoute.post("/profileCreate",verifyJwt,authorizeRole("sponsor"),upload.single("logo"),createSponsorProfile); //yaha pe photo vala bacha hai
 sponsorRoute.get("/profileFetch",verifyJwt,authorizeRole("sponsor"),getSponsorProfile);
-sponsorRoute.patch("/profileUpdate",verifyJwt,authorizeRole("sponsor"),updateSponsorProfile); //yaha pe bhi photo vala bacha hai 
+sponsorRoute.patch("/profileUpdate",verifyJwt,authorizeRole("sponsor"),upload.single("logo"),updateSponsorProfile); //yaha pe bhi photo vala bacha hai 
 sponsorRoute.delete("/profileDelete",verifyJwt,authorizeRole("sponsor"),deleteSponsorProfile);
 
 // //event fetch

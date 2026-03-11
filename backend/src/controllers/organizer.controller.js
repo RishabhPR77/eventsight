@@ -168,6 +168,11 @@ const getOrganizerEvents = asyncHandler(async (req,res)=>{
                 totalFeedbacks:{ $size:"$feedbacks" }
             }
         },
+        {
+            $project:{
+                feedbacks:0
+            }
+        },
 
         { $sort:{createdAt:-1} },
 
