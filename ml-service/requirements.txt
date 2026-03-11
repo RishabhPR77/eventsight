@@ -1,9 +1,10 @@
 fastapi
 uvicorn
 pandas
+numpy
+xgboost
 scikit-learn
 joblib
 groq
+python-dotenv
 pydantic
-numpy
-python-dotenv  
