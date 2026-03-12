@@ -29,10 +29,10 @@ const organizerSchema=new mongoose.Schema({
     },
     capacity:{
         type:Number,
-        default:0,
+        required:true,
         min:0
     },
-    Date:{
+    date:{
         type:Date,
         required:true,
         index:true,
@@ -43,7 +43,7 @@ const organizerSchema=new mongoose.Schema({
             message:"Event date must be in future"
         }
     },
-    ask:{
+    ask:{ //sponsor amount
         type:Number,
         required:true,
         min:0
@@ -62,6 +62,40 @@ const organizerSchema=new mongoose.Schema({
         default:"upcoming",
         index:true
     },
+    ticketPrice:{
+        type:Number,
+        required:true,
+        min:0
+    },
+    marketingBudget:{
+        type:Number,
+        required:true,
+        min:0
+    },
+    isIndoor:{
+        type:Boolean,
+        required:true
+    },
+    socialMediaAccount:[
+     {
+        platform:{
+            type:String,
+            required:true,
+            enum:["instagram","youtube","twitter","facebook","linkedin","other"]
+        },
+        link:{
+            type:String,
+            required:true,
+            trim:true
+        },
+        followers:{
+            type:Number,
+            required:true,
+            min:0
+        }
+     }
+    ],
+   
     isDeleted:{
         type:Boolean,
         default:false,
