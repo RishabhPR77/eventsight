@@ -24,10 +24,10 @@ export default function OutreachPanel({ text }) {
         </div>
 
         <div className="flex flex-wrap gap-2 sm:justify-end">
-          <button onClick={copy} className="btn-secondary !rounded-2xl !px-5 !py-3">
+          <button onClick={copy} className="btn-secondary !rounded-2xl !px-4 !py-2.5">
             {copied ? "Copied ✅" : "Copy text"}
           </button>
-          <button onClick={() => window.print()} className="btn-secondary !rounded-2xl !px-5 !py-3">
+          <button onClick={() => window.print()} className="btn-secondary !rounded-2xl !px-4 !py-2.5">
             Print / Export
           </button>
         </div>

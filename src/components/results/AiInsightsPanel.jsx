@@ -57,12 +57,12 @@ export default function AiInsightsPanel({ insights, brandAnalysis, result }) {
         <div>
           <div className="result-kicker">Understanding the result</div>
           <h3 className="result-section-title mt-1">{headline}</h3>
-          <p className="muted mt-2 text-lg leading-8 max-w-5xl">{explanation}</p>
+          <p className="muted result-support-copy mt-2 max-w-5xl">{explanation}</p>
         </div>
         <span className="result-chip">Easy summary</span>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid md:grid-cols-3 gap-3">
         {cards.map((card) => (
           <div key={card.title} className="result-inline-card h-full">
             <div className="result-eyebrow">{card.title}</div>

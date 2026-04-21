@@ -20,11 +20,11 @@ function StatBox({ label, value, sub }) {
 }
 
 function getFriendlyVerdict(band, probPct) {
-  if (band === "HIGH") return "Strong chance of getting this sponsor";
-  if (band === "MEDIUM") return "Decent chance, but the pitch needs work";
-  if (band === "LOW") return `Low chance of getting this sponsor${probPct ? ` (${probPct})` : ""}`;
-  if (band === "UNLIKELY") return "Very difficult to close this sponsor";
-  return "Sponsorship outcome summary";
+  if (band === "HIGH") return `Strong chance of approval${probPct ? ` (${probPct})` : ""}`;
+  if (band === "MEDIUM") return `Moderate chance of approval${probPct ? ` (${probPct})` : ""}`;
+  if (band === "LOW") return `Low chance of approval${probPct ? ` (${probPct})` : ""}`;
+  if (band === "UNLIKELY") return `Very low chance of approval${probPct ? ` (${probPct})` : ""}`;
+  return "Sponsorship result summary";
 }
 
 function getVerdictSummary({ band, probPct, synergy, crowd, comp, cost }) {
@@ -35,10 +35,10 @@ function getVerdictSummary({ band, probPct, synergy, crowd, comp, cost }) {
     return `This can still work, but the sponsor may need a clearer pitch, better packaging, or stronger proof of audience value before saying yes.`;
   }
   if (band === "LOW") {
-    return `Right now this deal may be hard to close. The model estimates only a ${probPct || "low"} chance because the brand match is ${synergy}%${comp ? `, there are ${comp} other competing events` : ""}${cost ? `, and the cost per person reached is ₹${cost.toFixed(2)}` : ""}.`;
+    return `This deal may be difficult right now. Approval is estimated at ${probPct || "low"} because the brand match is ${synergy}%${comp ? `, there are ${comp} competing events` : ""}${cost ? `, and cost per person is ₹${cost.toFixed(2)}` : ""}.`;
   }
   if (band === "UNLIKELY") {
-    return `This looks like a weak sponsorship opportunity in its current form. You would likely need to change the price, audience targeting, or event positioning before approaching sponsors.`;
+    return `This looks weak in its current form. You will likely need to change the price, audience targeting, or positioning before approaching sponsors.`;
   }
   return `This score uses brand fit, expected audience, competition, and pricing to estimate how likely a sponsor is to accept the proposal.`;
 }
@@ -99,7 +99,7 @@ export default function ExecutiveSummary({ brandCategory, dealData, result }) {
             {getFriendlyVerdict(band, probPct)}
           </h2>
 
-          <p className="muted text-lg leading-8 mt-4 max-w-4xl">
+          <p className="muted result-summary-copy mt-3 max-w-4xl">
             {getVerdictSummary({ band, probPct, synergy, crowd, comp, cost })}
           </p>
 
@@ -110,7 +110,7 @@ export default function ExecutiveSummary({ brandCategory, dealData, result }) {
             <Chip>{`Location: ${city}`}</Chip>
           </div>
 
-          <div className="result-note-card mt-6">
+          <div className="result-note-card mt-5">
             <div className="result-eyebrow">Main reasons</div>
             <ul className="result-list mt-3">
               {reasons.map((reason, index) => (
@@ -120,12 +120,12 @@ export default function ExecutiveSummary({ brandCategory, dealData, result }) {
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="result-stat-grid">
-            <StatBox label="Chance sponsor says yes" value={probPct || "—"} sub="Estimated approval chance" />
-            <StatBox label="Brand match" value={`${synergy}%`} sub="How well the sponsor fits this event" />
-            <StatBox label="Expected attendees" value={crowd ? fmtINR(crowd) : "—"} sub="Approximate crowd size" />
-            <StatBox label="Other similar events" value={comp || 0} sub="More events can reduce sponsor attention" />
+            <StatBox label="Approval chance" value={probPct || "—"} sub="Estimated chance" />
+            <StatBox label="Brand match" value={`${synergy}%`} sub="Sponsor-event fit" />
+            <StatBox label="Crowd estimate" value={crowd ? fmtINR(crowd) : "—"} sub="Approximate turnout" />
+            <StatBox label="Competing events" value={comp || 0} sub="Nearby alternatives" />
           </div>
 
           <div className="result-inline-card">
@@ -136,12 +136,12 @@ export default function ExecutiveSummary({ brandCategory, dealData, result }) {
             <div className="result-progress mt-3">
               <div className="result-progress-bar" style={{ width: `${Math.max(0, Math.min(100, occupancy))}%` }} />
             </div>
-            <div className="flex items-center justify-between mt-5 font-extrabold text-[var(--text-soft)] gap-4">
+            <div className="flex items-center justify-between mt-4 font-extrabold text-[var(--text-soft)] gap-4">
               <span>Cost per person reached</span>
               <span>{cost ? `₹${cost.toFixed(2)}` : "—"}</span>
             </div>
-            <p className="muted mt-3 text-sm leading-6">
-              Lower cost per person usually makes the deal easier for sponsors to accept.
+            <p className="muted result-inline-copy mt-3">
+              Lower cost per person usually makes the proposal easier to accept.
             </p>
           </div>
         </div>

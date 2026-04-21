@@ -32,7 +32,7 @@ export default function ResultsPanel({ brandCategory, dealData, result }) {
   const cold = coldEmailToText(normalized.cold_email);
 
   return (
-    <div className="space-y-5">
+    <div className="result-stack">
       <ExecutiveSummary brandCategory={brandCategory} dealData={dealData} result={normalized} />
       <AiInsightsPanel insights={normalized.ai_insights} brandAnalysis={normalized.brandAnalysis} result={normalized} />
       <RecommendationsPanel recs={normalized.recommendations} />
