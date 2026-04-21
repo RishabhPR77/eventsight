@@ -64,7 +64,11 @@ const createEventCategory = asyncHandler(async (req, res) => {
 
 const getEventCategories = asyncHandler(async (req, res) => {
     const categories = await EventCategory.find({ isDeleted: false }).sort({ createdAt: 1 });
-    return res.status(200).json(new ApiResponse(200, categories, "Event categories fetched successfully"));
+    const formattedCategories = categories.map(cat => ({
+        ...cat.toObject(),
+        name: cat.name.toUpperCase()
+    }));
+    return res.status(200).json(new ApiResponse(200, formattedCategories, "Event categories fetched successfully"));
 });
 
 const deleteEventCategory = asyncHandler(async (req, res) => {
@@ -92,7 +96,11 @@ const createBrandType = asyncHandler(async (req, res) => {
 
 const getBrandTypes = asyncHandler(async (req, res) => {
     const brands = await BrandType.find({}).sort({ createdAt: 1 });
-    return res.status(200).json(new ApiResponse(200, brands, "Brand types fetched successfully"));
+    const formattedBrandType=brands.map(brand=>({
+        ...brand.toObject(),
+        name:brand.name.toUpperCase()
+    }));
+    return res.status(200).json(new ApiResponse(200,formattedBrandType , "Brand types fetched successfully"));
 });
 
 const deleteBrandType = asyncHandler(async (req, res) => {

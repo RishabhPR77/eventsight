@@ -679,7 +679,8 @@ const getPrediction = asyncHandler(async (req, res) => {
         throw new ApiError(500, "Brand analysis failed")
     }
 
-    console.log(avgOrganizerReputation,avgLineupQuality,avgActivationMaturity)
+    console.log(eventData.eventCategory?.name)
+    console.log(sponsorProfile.brandType.name)
     let predictResponse
     try {
         predictResponse = await axios.post(

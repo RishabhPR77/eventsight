@@ -1,54 +1,65 @@
 import React from "react";
 
-function asList(value) {
-  return Array.isArray(value) ? value.filter(Boolean) : [];
+function friendlyNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function buildCards(result, brandAnalysis, recommendations) {
+  const synergy = Math.round(friendlyNumber(result?.breakdown?.brand_synergy, 0));
+  const crowd = Math.round(friendlyNumber(result?.attendance, 0));
+  const occupancy = friendlyNumber(result?.breakdown?.occupancy_rate, 0);
+  const comp = Math.round(friendlyNumber(result?.breakdown?.competing_events, 0));
+  const cost = friendlyNumber(result?.breakdown?.cost_per_head, 0);
+  const prob = Math.round(friendlyNumber(result?.feasibility_probability, 0) * 100);
+
+  const positives = [];
+  const concerns = [];
+  const nextSteps = [];
+
+  if (crowd > 0) positives.push(`The event may still attract around ${crowd.toLocaleString("en-IN")} people.`);
+  if (occupancy >= 70) positives.push(`Expected turnout is healthy at about ${occupancy.toFixed(1)}%.`);
+  if (synergy >= 60) positives.push(`Brand match is reasonably strong at ${synergy}%.`);
+  if (!positives.length) positives.push("There are still some usable signals, but the overall case is not strong enough yet.");
+
+  if (synergy < 45) concerns.push(`Brand match is low (${synergy}%), so the sponsor may not see a clear fit.`);
+  if (cost >= 100) concerns.push(`Cost per person reached is high at ₹${cost.toFixed(2)}, which can make the proposal feel expensive.`);
+  else if (cost >= 40) concerns.push(`Cost per person reached is a little high at ₹${cost.toFixed(2)}.`);
+  if (comp >= 3) concerns.push(`There are ${comp} other competing events, so sponsor attention may get divided.`);
+  else if (comp > 0) concerns.push(`There is some competition from ${comp} other event${comp > 1 ? "s" : ""}.`);
+  if (prob < 35) concerns.push(`Overall approval chance is currently low at ${prob}%.`);
+  if (!concerns.length && brandAnalysis?.fit_reason) concerns.push(brandAnalysis.fit_reason);
+
+  (Array.isArray(recommendations) ? recommendations : []).slice(0, 3).forEach((item) => {
+    if (typeof item === "string") nextSteps.push(item);
+    else if (item?.action) nextSteps.push(item.action);
+  });
+  if (!nextSteps.length) {
+    nextSteps.push("Improve the package value before approaching the sponsor.");
+    nextSteps.push("Show clearer audience proof and stronger credibility signals.");
+  }
+
+  return [
+    { title: "What looks okay", items: positives },
+    { title: "What may worry the sponsor", items: concerns },
+    { title: "What you should do next", items: nextSteps },
+  ];
 }
 
 export default function AiInsightsPanel({ insights, brandAnalysis, result }) {
-  const kf = asList(insights?.key_factors);
-  const wm = asList(insights?.what_it_means);
-  const na = asList(insights?.next_actions);
-
-  const hasInsightContent = insights?.headline || insights?.explanation || kf.length || wm.length || na.length;
-
-  const fallbackFactors = [
-    `Synergy (fit): ${Math.round(Number(result?.breakdown?.brand_synergy || 0))}/100`,
-    `Predicted crowd: ${Number(result?.attendance || 0)} (occupancy ${Number(result?.breakdown?.occupancy_rate || 0).toFixed(1)}%)`,
-    `Competition: ${Number(result?.breakdown?.competing_events || 0)} competing events`,
-    `Cost per reach: Rs.${Number(result?.breakdown?.cost_per_head || 0).toFixed(2)}`,
-    `Acceptance probability: ${Math.round(Number(result?.feasibility_probability || 0) * 100)}%`,
-  ];
-
-  const fallbackMeaning = [
-    brandAnalysis?.positioning || "Synergy measures category and audience fit, but does not guarantee sponsor acceptance.",
-    brandAnalysis?.fit_reason || "Potential reflects acceptance likelihood after accounting for competition and delivery risk.",
-  ].filter(Boolean);
-
-  const fallbackActions = [
-    ...(Array.isArray(result?.recommendations) ? result.recommendations.slice(0, 2).map((item) => item?.action || item) : []),
-  ].filter(Boolean);
-
-  const cards = [
-    { title: "Key factors", items: hasInsightContent ? kf : fallbackFactors },
-    { title: "What it means", items: hasInsightContent ? wm : fallbackMeaning },
-    { title: "Next actions", items: hasInsightContent ? na : fallbackActions },
-  ];
-
-  if (!cards.some((card) => card.items.length) && !insights?.headline && !insights?.explanation && !brandAnalysis?.summary) {
-    return null;
-  }
+  const cards = buildCards(result, brandAnalysis, result?.recommendations);
+  const headline = insights?.headline || "Why the result looks like this";
+  const explanation = insights?.explanation || brandAnalysis?.summary || "We looked at brand fit, expected audience, cost, and competition to estimate how easy this sponsorship will be to close.";
 
   return (
     <section className="result-card">
       <div className="flex items-start justify-between gap-4 mb-5">
         <div>
-          <div className="result-kicker">AI insights</div>
-          <h3 className="result-section-title mt-1">{insights?.headline || result?.verdict || "Decision support summary"}</h3>
-          <p className="muted mt-2 text-lg leading-8 max-w-5xl">
-            {insights?.explanation || brandAnalysis?.summary || "This score combines brand-event fit, deal economics, and market risk factors into one sponsor-facing recommendation."}
-          </p>
+          <div className="result-kicker">Understanding the result</div>
+          <h3 className="result-section-title mt-1">{headline}</h3>
+          <p className="muted mt-2 text-lg leading-8 max-w-5xl">{explanation}</p>
         </div>
-        <span className="result-chip">Groq</span>
+        <span className="result-chip">Easy summary</span>
       </div>
 
       <div className="grid md:grid-cols-3 gap-4">
@@ -64,7 +75,9 @@ export default function AiInsightsPanel({ insights, brandAnalysis, result }) {
         ))}
       </div>
 
-      {insights?.caution ? <div className="result-caution">{insights.caution}</div> : null}
+      <div className="result-caution">
+        This is a smart estimate to guide decisions. It helps you pitch better, but it does not guarantee a sponsor response.
+      </div>
     </section>
   );
 }

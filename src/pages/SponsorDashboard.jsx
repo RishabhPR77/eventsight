@@ -22,44 +22,66 @@ const getBrandTypeName = (brandType, brandTypes = []) => {
   return brandTypes.find((item) => item?._id === brandType)?.name || "";
 };
 
-function StatCard({ label, value, hint, icon }) {
+function IconBadge({ children, tone = "default" }) {
+  return <span className={cx("organizer-stat-icon", tone !== "default" && `organizer-stat-icon-${tone}`)}>{children}</span>;
+}
+
+function TargetIcon() {
   return (
-    <div style={{
-      position: "relative",
-      overflow: "hidden",
-      borderRadius: "6px",
-      padding: "4px",
-      background: "rgba(255, 255, 255, 0.08)",
-      backdropFilter: "blur(12px)",
-      border: "1px solid rgba(255, 255, 255, 0.12)",
-      color: "#fff",
-      textAlign: "center"
-    }}>
-      <div style={{ position: "relative", zIndex: 1 }}>
-        <div className="flex items-center justify-center gap-1 mb-3">
-          <span style={{ fontSize: "1.2rem" }}>{icon}</span>
-          <div style={{
-            fontSize: "11px",
-            fontWeight: 800,
-            textTransform: "uppercase",
-            letterSpacing: "0.15em",
-            opacity: 0.9
-          }}>{label}</div>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+      <path d="M17 7l4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M18 3h3v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function InsightsIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="4" stroke="currentColor" strokeWidth="2" />
+      <path d="M8 15V10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M12 15V7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M16 15v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function DiamondIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 9 8.5 4h7L20 9l-8 11L4 9Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M8.5 4 12 9l3.5-5" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M4 9h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="m5 12 4.2 4.2L19 6.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function StatCard({ label, value, hint, helper, icon, tone }) {
+  return (
+    <div className="organizer-stat-card">
+      <div className="organizer-stat-top">
+        <div className="flex items-center gap-3 min-w-0">
+          <IconBadge tone={tone}>{icon}</IconBadge>
+          <div className="min-w-0">
+            <div className="organizer-stat-label">{label}</div>
+            {hint ? <div className="organizer-stat-hint">{hint}</div> : null}
+          </div>
         </div>
-        <div className="text-2xl font-black">{value}</div>
-        {hint ? <div style={{ opacity: 0.5, fontSize: "0.85rem", marginTop: "-1px" }}>{hint}</div> : null}
       </div>
-      <div style={{
-        position: "absolute",
-        top: "-10%",
-        right: "-5%",
-        fontSize: "5.5rem",
-        opacity: 0.04,
-        fontWeight: 900,
-        pointerEvents: "none"
-      }}>
-        {icon}
-      </div>
+      <div className="organizer-stat-value">{value}</div>
+      {helper ? <div className="organizer-stat-helper">{helper}</div> : null}
+      <div className="organizer-stat-glow" />
     </div>
   );
 }
@@ -300,47 +322,82 @@ export default function SponsorDashboard({ user }) {
     profile: profile ? "Ready" : "Missing",
   };
 
+  const quickHighlights = [
+    `${stats.available} live opportunit${stats.available === 1 ? "y" : "ies"}`,
+    `${stats.completed} analyzed deal${stats.completed === 1 ? "" : "s"}`,
+    profile ? "Profile ready for matching" : "Complete profile to improve matching",
+  ];
+
   if (loading) return <div className="text-center py-20 muted">Loading dashboard data...</div>;
 
   return (
     <div className="space-y-6">
-      <section className="hero-panel" style={{
-        background: "linear-gradient(135deg, #6d5efc 0%, #4f46e5 100%)",
-        color: "#fff",
-        border: "none",
-        position: "relative",
-        overflow: "hidden"
-      }}>
-        {/* Subtle decorative glow */}
-        <div style={{
-          position: "absolute",
-          top: "-20%",
-          right: "-10%",
-          width: "400px",
-          height: "400px",
-          background: "radial-gradient(circle, rgba(255,255,255,0.1), transparent 70%)",
-          pointerEvents: "none"
-        }} />
+      <section className="hero-panel organizer-hero-panel sponsor-hero-panel">
+        <div className="organizer-hero-orb organizer-hero-orb-left" />
+        <div className="organizer-hero-orb organizer-hero-orb-right" />
+        <div className="organizer-hero-grid relative z-10">
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <div className="organizer-hero-kicker">Sponsor ecosystem</div>
+              <div className="space-y-3">
+                <h1 className="organizer-hero-title">Welcome back, {user?.username || "Sponsor"}</h1>
+                <p className="organizer-hero-subtitle sponsor-hero-subtitle">
+                  Discover high-fit events, compare opportunities faster, and keep your sponsorship pipeline organized in one place.
+                </p>
+              </div>
+            </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-6 relative z-10">
-          <div>
-            <div className="section-kicker !text-white/60 mb-3">Sponsor ecosystem</div>
-            <h1 className="section-title !text-white !text-[clamp(2.4rem,5vw,2.2rem)] mb-4">
-              Welcome, {user?.username || "Sponsor"}
-            </h1>
-            <p className="text-white/80 text-lg leading-8 max-w-2xl font-small">
-              Your command center for discovering high-fit events, running AI-backed ROI predictions, and managing sponsorship pipelines.
-            </p>
+            <div className="organizer-hero-chip-row">
+              {quickHighlights.map((item) => (
+                <span key={item} className="organizer-hero-chip">
+                  <CheckIcon />
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="organizer-hero-actions">
+            <button
+              className="organizer-hero-create-btn"
+              onClick={() => setMode(profile ? "edit" : "create")}
+            >
+              <span className="text-xl leading-none">+</span>
+              {profile ? "Edit profile" : "Create profile"}
+            </button>
+            <div className="organizer-hero-tip-card sponsor-hero-tip-card">
+              <div className="organizer-hero-tip-label">Quick focus</div>
+              <div className="organizer-hero-tip-text">
+                Keep profile details updated for better event matching.
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="grid sm:grid-cols-3 gap-20 mt-10 relative z-10">
-          <StatCard label="Live opportunities" value={stats.available} icon="🎯" />
-          <StatCard label="Analyzed deals" value={stats.completed} icon="📊" />
+        <div className="organizer-stat-grid relative z-10">
+          <StatCard
+            label="Live opportunities"
+            value={stats.available}
+            hint="Events you can explore now"
+            helper="Shortlist the best options faster."
+            icon={<TargetIcon />}
+            tone="blue"
+          />
+          <StatCard
+            label="Analyzed deals"
+            value={stats.completed}
+            hint="Past evaluations saved"
+            helper="Review what you already compared."
+            icon={<InsightsIcon />}
+            tone="gold"
+          />
           <StatCard
             label="Profile readiness"
             value={stats.profile === "Ready" ? "100%" : "0%"}
-            icon="💎"
+            hint={stats.profile === "Ready" ? "Brand profile complete" : "Complete your brand profile"}
+            helper="Better profile, better event matching."
+            icon={<DiamondIcon />}
+            tone="emerald"
           />
         </div>
       </section>

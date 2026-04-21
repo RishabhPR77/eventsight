@@ -6,51 +6,70 @@ import {
   fetchCities,
   fetchEventCategories,
   getOrganizerEvents,
-  backend,
 } from "@/lib/api";
 import { fmtINR, getErrorMessage, resolveMediaUrl } from "@/lib/utils";
 
 const cx = (...xs) => xs.filter(Boolean).join(" ");
 const PLATFORMS = ["instagram", "youtube", "twitter", "facebook", "linkedin", "other"];
 
-function StatCard({ label, value, hint, icon }) {
+function IconBadge({ children, tone = "default" }) {
+  return <span className={cx("organizer-stat-icon", tone !== "default" && `organizer-stat-icon-${tone}`)}>{children}</span>;
+}
+
+function CalendarIcon() {
   return (
-    <div style={{
-      position: "relative",
-      overflow: "hidden",
-      borderRadius: "10px",
-      padding: "10px",
-      background: "rgba(255, 255, 255, 0.08)",
-      backdropFilter: "blur(12px)",
-      border: "1px solid rgba(255, 255, 255, 0.12)",
-      color: "#fff",
-      textAlign: "center"
-    }}>
-      <div style={{ position: "relative", zIndex: 1 }}>
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <span style={{ fontSize: "1.2rem" }}>{icon}</span>
-          <div style={{
-            fontSize: "13px",
-            fontWeight: 800,
-            textTransform: "uppercase",
-            letterSpacing: "0.15em",
-            opacity: 0.9
-          }}>{label}</div>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M8 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M16 2v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M3 9h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <rect x="3" y="5" width="18" height="16" rx="4" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function SparkIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M13 2 5 14h6l-1 8 9-13h-6l0-7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function TrophyIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M8 21h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M12 17v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M7 4h10v3a5 5 0 1 1-10 0V4Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M17 6h2a2 2 0 0 1 0 4h-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M7 6H5a2 2 0 1 0 0 4h2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="m5 12 4.2 4.2L19 6.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function StatCard({ label, value, hint, helper, icon, tone }) {
+  return (
+    <div className="organizer-stat-card">
+      <div className="organizer-stat-top">
+        <div className="flex items-center gap-3 min-w-0">
+          <IconBadge tone={tone}>{icon}</IconBadge>
+          <div className="min-w-0">
+            <div className="organizer-stat-label">{label}</div>
+            {hint ? <div className="organizer-stat-hint">{hint}</div> : null}
+          </div>
         </div>
-        <div className="text-2xl font-black">{value}</div>
-        {hint ? <div style={{ opacity: 0.5, fontSize: "0.85rem", marginTop: "8px" }}>{hint}</div> : null}
       </div>
-      <div style={{
-        position: "absolute",
-        top: "-10%",
-        right: "-5%",
-        fontSize: "5.5rem",
-        opacity: 0.04,
-        fontWeight: 900,
-        pointerEvents: "none"
-      }}>
-        {icon}
-      </div>
+      <div className="organizer-stat-value">{value}</div>
+      {helper ? <div className="organizer-stat-helper">{helper}</div> : null}
+      <div className="organizer-stat-glow" />
     </div>
   );
 }
@@ -277,9 +296,8 @@ export default function OrganizerDashboard({ user }) {
     setSubmitting(true);
     const rawForm = e.currentTarget;
     const form = new FormData();
-    // Manually append to be 100% sure
     const fields = ["eventName", "eventCategory", "eventDescription", "location", "capacity", "date", "ask", "ticketPrice", "marketingBudget", "socialMediaAccount"];
-    fields.forEach(f => {
+    fields.forEach((f) => {
       const val = rawForm.elements[f]?.value;
       if (val !== undefined) form.append(f, val);
     });
@@ -287,8 +305,8 @@ export default function OrganizerDashboard({ user }) {
     if (rawForm.elements.thumbnail?.files?.[0]) {
       form.append("thumbnail", rawForm.elements.thumbnail.files[0]);
     }
-    form.append("_v", Date.now()); // Ensure body is never empty
-    
+    form.append("_v", Date.now());
+
     try {
       await createEvent(form);
       toast.success("Event created successfully");
@@ -311,58 +329,87 @@ export default function OrganizerDashboard({ user }) {
 
   const summary = {
     total: events.length,
-    upcoming: events.filter(e => (e.status || (new Date(e.date) >= new Date() ? "upcoming" : "")) === "upcoming").length,
-    completed: events.filter(e => (e.status || (new Date(e.date) < new Date() ? "completed" : "")) === "completed").length,
+    upcoming: events.filter((e) => (e.status || (new Date(e.date) >= new Date() ? "upcoming" : "")) === "upcoming").length,
+    completed: events.filter((e) => (e.status || (new Date(e.date) < new Date() ? "completed" : "")) === "completed").length,
   };
+
+  const quickHighlights = [
+    `${summary.upcoming} active event${summary.upcoming === 1 ? "" : "s"}`,
+    `${summary.total} total listing${summary.total === 1 ? "" : "s"}`,
+    `${summary.completed} completed event${summary.completed === 1 ? "" : "s"}`,
+  ];
 
   if (loading) return <div className="text-center py-20 muted">Loading dashboard data...</div>;
 
   return (
     <div className="space-y-6">
-      <section className="hero-panel" style={{
-        background: "linear-gradient(135deg, #6d5efc 0%, #4f46e5 100%)",
-        color: "#fff",
-        border: "none",
-        position: "relative",
-        overflow: "hidden"
-      }}>
-        {/* Subtle decorative glow */}
-        <div style={{
-          position: "absolute",
-          top: "-20%",
-          right: "-10%",
-          width: "400px",
-          height: "400px",
-          background: "radial-gradient(circle, rgba(255,255,255,0.1), transparent 70%)",
-          pointerEvents: "none"
-        }} />
+      <section className="hero-panel organizer-hero-panel">
+        <div className="organizer-hero-orb organizer-hero-orb-left" />
+        <div className="organizer-hero-orb organizer-hero-orb-right" />
+        <div className="organizer-hero-grid relative z-10">
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <div className="organizer-hero-kicker">Organizer dashboard</div>
+              <div className="space-y-3">
+                <h1 className="organizer-hero-title">Welcome back, {user?.username || "Organizer"}</h1>
+                <p className="organizer-hero-subtitle">
+                  Manage listings, track active events, and keep your profile sponsor-ready.
+                </p>
+              </div>
+            </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-6 relative z-10">
-          <div>
-            <div className="section-kicker !text-white/60 mb-3">Organizer dashboard</div>
-            <h1 className="section-title !text-white !text-[clamp(2.4rem,5vw,2.4rem)] mb-2">
-              Welcome, {user?.username || "Organizer"}
-            </h1>
-            <p className="text-white/80 text-lg leading-8 max-w-2xl font-medium">
-              Manage your event listings, track sponsorship inquiries, and monitor quality signals to attract high-value brand deals.
-            </p>
+            <div className="organizer-hero-chip-row">
+              {quickHighlights.map((item) => (
+                <span key={item} className="organizer-hero-chip">
+                  <CheckIcon />
+                  {item}
+                </span>
+              ))}
+            </div>
           </div>
-          <button 
-            className="px-6 py-3 bg-white text-indigo-600 rounded-full font-black text-sm uppercase tracking-wider shadow-[0_10px_20px_rgba(0,0,0,0.1)] hover:scale-105 transition-transform active:scale-95" 
-            onClick={() => setModalMode("create")}
-          >
-            + Create event
-          </button>
+
+          <div className="organizer-hero-actions">
+            <button className="organizer-hero-create-btn" onClick={() => setModalMode("create")}>
+              <span className="text-xl leading-none">+</span>
+              Create event
+            </button>
+            <div className="organizer-hero-tip-card">
+              <div className="organizer-hero-tip-label">Quick focus</div>
+              <div className="organizer-hero-tip-text">
+                Keep details updated so sponsors can quickly understand your event.
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="grid sm:grid-cols-3 gap-20 mt-10 relative z-10">
-          <StatCard label="Total listings" value={summary.total} icon="📅" />
-          <StatCard label="Active events" value={summary.upcoming} icon="⚡" />
-          <StatCard label="Completed deals" value={summary.completed} icon="🏆" />
+        <div className="organizer-stat-grid relative z-10">
+          <StatCard
+            label="Total listings"
+            value={summary.total}
+            hint="All events published"
+            helper="All events currently listed."
+            icon={<CalendarIcon />}
+            tone="blue"
+          />
+          <StatCard
+            label="Active events"
+            value={summary.upcoming}
+            hint="Currently open or upcoming"
+            helper="Events sponsors are most likely to see first."
+            icon={<SparkIcon />}
+            tone="gold"
+          />
+          <StatCard
+            label="Completed events"
+            value={summary.completed}
+            hint="Past events on record"
+            helper="Shows your past event experience."
+            icon={<TrophyIcon />}
+            tone="emerald"
+          />
         </div>
       </section>
 
-      {/* Events section */}
       <section className="space-y-6">
         <div className="surface-card">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -390,7 +437,7 @@ export default function OrganizerDashboard({ user }) {
 
           <div className="flex flex-wrap gap-3 mt-6">
             <div className="tab-row">
-              {[["", "All"], ["upcoming", "Upcoming"], ["completed", "Completed"]].map(([id, label]) => (
+              {[ ["", "All"], ["upcoming", "Upcoming"], ["completed", "Completed"] ].map(([id, label]) => (
                 <button key={id} className={cx("tab-pill", filterType === id && "active")} onClick={() => setFilterType(id)}>{label}</button>
               ))}
             </div>

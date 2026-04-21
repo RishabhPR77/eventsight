@@ -22,15 +22,19 @@ export default function RecommendationsPanel({ recs }) {
 
   return (
     <section className="result-card">
-      <div className="result-kicker result-kicker-good">Recommendations</div>
-      <h3 className="result-section-title mt-1">Improve acceptance</h3>
+      <div className="result-kicker result-kicker-good">What to improve</div>
+      <h3 className="result-section-title mt-1">Simple ways to increase sponsor interest</h3>
+      <p className="muted mt-2 text-lg leading-8 max-w-5xl">
+        Start with the biggest issues first. These changes are the easiest way to make the proposal feel safer and more valuable to a sponsor.
+      </p>
 
       <div className="grid gap-4 mt-5">
         {items.map((item, index) => (
           <article key={index} className="result-accent-card result-accent-card-good">
-            <div className="result-action-title">{item.action}</div>
+            <div className="result-eyebrow">Step {index + 1}</div>
+            <div className="result-action-title mt-2">{item.action}</div>
             {item.why ? <p className="muted mt-3 leading-8">{item.why}</p> : null}
-            {item.expected_effect ? <div className="result-impact mt-4">{item.expected_effect}</div> : null}
+            {item.expected_effect ? <div className="result-impact mt-4">Possible impact: {item.expected_effect}</div> : null}
           </article>
         ))}
       </div>
