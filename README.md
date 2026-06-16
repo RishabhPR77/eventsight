@@ -1,9 +1,9 @@
-# EventSight — Intelligent Event Sponsorship Platform
+# SponsorWise - Intelligent Event Sponsorship Platform
 
 > **Undergraduate Research Project** · Madhav Institute of Technology and Science, Gwalior  
 > Built by **Rishabh Patidar** (ML Engineer / Data Scientist) & **Sujal Hammad** (Backend Developer)
 
-EventSight is a full-stack AI-powered platform that helps event organizers in Madhya Pradesh find the right sponsors — and helps sponsors evaluate whether an event is worth their money. At its core is a two-stage XGBoost pipeline that predicts event attendance and sponsorship acceptance probability, augmented by LLM-generated insights, negotiation strategies, and cold outreach emails.
+SponsorWise is a full-stack AI-powered platform that helps event organizers in Madhya Pradesh find the right sponsors - and helps sponsors evaluate whether an event is worth their money. At its core is a two-stage XGBoost pipeline that predicts event attendance and sponsorship acceptance probability, augmented by LLM-generated insights, negotiation strategies, and cold outreach emails.
 
 ---
 
@@ -32,7 +32,7 @@ Small and mid-scale event organizers in Tier-2 and Tier-3 cities of Madhya Prade
 - Sponsors have no reliable signal to evaluate whether an event is worth sponsoring.
 - Cold outreach is generic, and deal negotiation is done blind.
 
-EventSight solves this by acting as an intelligent matchmaker — giving organizers predictions, insights, and tools to pitch better, and giving sponsors a data-driven view before they commit.
+SponsorWise solves this by acting as an intelligent matchmaker - giving organizers predictions, insights, and tools to pitch better, and giving sponsors a data-driven view before they commit.
 
 ---
 
@@ -73,7 +73,7 @@ EventSight solves this by acting as an intelligent matchmaker — giving organiz
 | **Frontend** | React 19, Vite, Tailwind CSS, React Router v7, Socket.io-client, Axios |
 | **Backend** | Node.js, Express 5, MongoDB, Mongoose, JWT, bcryptjs, Nodemailer, Multer, Cloudinary, Socket.io, node-cron |
 | **ML Service** | Python, FastAPI, XGBoost, scikit-learn, pandas, NumPy, Groq SDK, joblib, Pydantic v2, Uvicorn |
-| **LLM** | Groq API — `llama-3.3-70b-versatile` |
+| **LLM** | Groq API - `llama-3.3-70b-versatile` |
 | **Infra** | Vercel (frontend), environment-configurable origins for backend and ML |
 
 ---
@@ -81,7 +81,7 @@ EventSight solves this by acting as an intelligent matchmaker — giving organiz
 ## Project Structure
 
 ```
-eventsight/
+SponsorWise/
 ├── src/                        # React frontend (joint work)
 │   ├── components/
 │   │   ├── ui/                 # Reusable UI: Card, Badge, Button, Stat, Separator
@@ -108,14 +108,14 @@ eventsight/
 │       │                       # SponsorApplication, City, SponsorBrandTypes
 │       ├── routes/             # auth, organizer, sponsor, admin, chat
 │       ├── middleware/         # auth, admin, role-check, multer
-│       ├── socket/             # chatSocket.js — real-time messaging
-│       ├── jobs/               # eventExpiry.job.js — cron auto-expiry
+│       ├── socket/             # chatSocket.js - real-time messaging
+│       ├── jobs/               # eventExpiry.job.js - cron auto-expiry
 │       ├── utility/            # ApiError, ApiResponse, AsyncHandler,
 │       │                       # cloudinary, sendEmail, mlInputMapper
 │       └── db/                 # MongoDB connection
 │
 └── ml-service/                 # FastAPI ML microservice (Rishabh)
-    ├── main.py                 # Full pipeline — predictions + AI insights
+    ├── main.py                 # Full pipeline - predictions + AI insights
     ├── train.ipynb             # Model training notebook
     ├── preprocess.ipynb        # Data preprocessing notebook
     ├── mp_sponsorwise_dataset.csv      # Raw synthetic dataset (~70k rows)
@@ -130,13 +130,13 @@ eventsight/
 
 ## ML Service
 
-**Owned by Rishabh Patidar**
+**Created by Rishabh Patidar**
 
 The ML service is a self-contained FastAPI microservice that exposes the prediction pipeline to the backend. It runs independently and is called by the Node.js backend via authenticated HTTP requests.
 
 ### Two-Stage XGBoost Pipeline
 
-**Stage 1 — Attendance Predictor**  
+**Stage 1 - Attendance Predictor**  
 Predicts expected event attendance given venue capacity, marketing budget, ticket price, organizer reputation, lineup quality, event type, city, date context, weather, and competition.
 
 A clamping function converts raw model output to realistic fill-rate estimates tuned for Tier-2/3 MP city events:
@@ -144,7 +144,7 @@ A clamping function converts raw model output to realistic fill-rate estimates t
 - 1.0× ≤ demand < 1.4× → smooth fill between 55–82%
 - Demand < 1.0× → trust model output
 
-**Stage 2 — Sponsorship Acceptance Classifier**  
+**Stage 2 - Sponsorship Acceptance Classifier**  
 Takes the scaled feature matrix from Stage 1 plus the raw attendance prediction as an additional feature and outputs:
 - Binary acceptance prediction (will sponsor accept?)
 - Acceptance probability (used to generate potential bands: HIGH / MEDIUM / LOW / UNLIKELY)
@@ -159,27 +159,27 @@ Takes the scaled feature matrix from Stage 1 plus the raw attendance prediction 
 - **Brand:** category (one-hot), annual budget, KPI type, city focus, activation maturity  
 - **Fit:** brand-event synergy score (AI or math fallback)
 
-### AI Layer — Groq LLM Integration
+### AI Layer - Groq LLM Integration
 
 Two Groq API calls per `/predict` request:
 
-1. **Pre-ML Synergy Score** — Asks the LLM to rate brand-event fit (0–100) based on audience alignment and thematic relevance. This score feeds directly into the ML feature matrix as `fit_score`.
+1. **Pre-ML Synergy Score** - Asks the LLM to rate brand-event fit (0–100) based on audience alignment and thematic relevance. This score feeds directly into the ML feature matrix as `fit_score`.
 
-2. **Post-ML Analysis Bundle** — After predictions are made, a single call generates:
+2. **Post-ML Analysis Bundle** - After predictions are made, a single call generates:
    - Insights headline, explanation, key factors
    - Actionable next steps for the organizer
    - 2 negotiation points (objection + rebuttal pairs)
    - Cold outreach email written *from the sponsor to the organizer* (zero ML numbers in the email)
 
-Pure-Python fallbacks exist for all AI outputs — the service is fully functional without Groq.
+Pure-Python fallbacks exist for all AI outputs - the service is fully functional without Groq.
 
 ### Key Design Decisions
 
-- **Canonical normalization** — all event types and brand categories are normalized via regex before lookup, fixing a bug where hyphenated strings like `"stand-up comedy"` were never matched.
-- **No circular budget inflation** — `brand_annual_budget` is never derived from `sponsor_amount` to avoid input leakage.
-- **API key auth** — protected routes require `X-API-Key` header; unauthenticated in local dev when key is unset.
-- **Request tracing** — every response carries `X-Request-ID` and `X-Response-Time-Ms` headers.
-- **NumPy pickle shim** — handles cross-version compatibility when loading `.pkl` artifacts.
+- **Canonical normalization** - all event types and brand categories are normalized via regex before lookup, fixing a bug where hyphenated strings like `"stand-up comedy"` were never matched.
+- **No circular budget inflation** - `brand_annual_budget` is never derived from `sponsor_amount` to avoid input leakage.
+- **API key auth** - protected routes require `X-API-Key` header; unauthenticated in local dev when key is unset.
+- **Request tracing** - every response carries `X-Request-ID` and `X-Response-Time-Ms` headers.
+- **NumPy pickle shim** - handles cross-version compatibility when loading `.pkl` artifacts.
 
 ### Endpoints
 
@@ -193,7 +193,7 @@ Pure-Python fallbacks exist for all AI outputs — the service is fully function
 
 ## Backend
 
-**Owned by Sujal Hammad**
+**Created by Sujal Hammad**
 
 A Node.js + Express REST API that manages all application data, user authentication, file uploads, and real-time communication. It acts as the bridge between the frontend and the ML service.
 
@@ -243,14 +243,14 @@ A React 19 SPA built with Vite and styled entirely with Tailwind CSS. The two da
 
 ### Key Pages & Components
 
-- **AuthGate** — protects all authenticated routes, redirects to login if needed
-- **DashboardSwitch** — renders `OrganizerDashboard` or `SponsorDashboard` based on user role
-- **SponsorWisePage** — main analysis flow: enter event + brand details, get ML predictions
-- **SponsorAnalysisPage** — full results view with tabbed panels (AI Insights, Recommendations, Executive Summary, Negotiation, Outreach)
-- **OrganizerEventPage / SponsorEventPage** — event detail views with inline ChatBox
-- **ResultsPanel / AiInsightsPanel / NegotiationPanel / OutreachPanel** — modular result components
-- **ChatBox** — real-time Socket.io chat embedded in event pages
-- **AdminPage** — category/city/brand-type management
+- **AuthGate** - protects all authenticated routes, redirects to login if needed
+- **DashboardSwitch** - renders `OrganizerDashboard` or `SponsorDashboard` based on user role
+- **SponsorWisePage** - main analysis flow: enter event + brand details, get ML predictions
+- **SponsorAnalysisPage** - full results view with tabbed panels (AI Insights, Recommendations, Executive Summary, Negotiation, Outreach)
+- **OrganizerEventPage / SponsorEventPage** - event detail views with inline ChatBox
+- **ResultsPanel / AiInsightsPanel / NegotiationPanel / OutreachPanel** - modular result components
+- **ChatBox** - real-time Socket.io chat embedded in event pages
+- **AdminPage** - category/city/brand-type management
 
 ---
 
@@ -280,7 +280,7 @@ Weather defaults, festive months, city populations, and brand budget benchmarks 
 - Python ≥ 3.10
 - MongoDB (local or Atlas)
 - Cloudinary account
-- Groq API key (optional — service degrades gracefully without it)
+- Groq API key (optional - service degrades gracefully without it)
 
 ### 1. ML Service
 
@@ -356,7 +356,7 @@ VITE_ML_SERVICE_URL=http://localhost:8000
 | | **Rishabh Patidar** | **Sujal Hammad** |
 |---|---|---|
 | **Role** | ML Engineer & Data Scientist | Backend Developer |
-| **Primary Ownership** | `ml-service/` — dataset design, feature engineering, XGBoost pipeline, FastAPI service, LLM integration | `backend/` — REST API, database schema, auth system, real-time chat, file uploads, cron jobs |
+| **Created** | `ml-service/` - dataset design, feature engineering, XGBoost pipeline, FastAPI service, LLM integration | `backend/` - REST API, database schema, auth system, real-time chat, file uploads, cron jobs |
 | **Shared Work** | React frontend (`src/`), system design, integration | React frontend (`src/`), system design, integration |
 | **Institution** | Madhav Institute of Technology and Science, Gwalior | Madhav Institute of Technology and Science, Gwalior |
 | **Project Context** | Undergraduate Minor Project | Undergraduate Minor Project |
@@ -373,4 +373,4 @@ VITE_ML_SERVICE_URL=http://localhost:8000
 
 ---
 
-*EventSight — Turning event data into sponsorship intelligence.*
+*SponsorWise - Turning event data into sponsorship intelligence.*
