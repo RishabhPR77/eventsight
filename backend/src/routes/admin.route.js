@@ -1,5 +1,6 @@
 const express = require("express");
 const { verifyAdmin } = require("../middleware/admin.middleware");
+const { authLimiter } = require("../middleware/rateLimit.middleware");
 const {
     adminLogin,
     adminLogout,
@@ -22,7 +23,7 @@ const {
 const adminRoute = express.Router();
 
 
-adminRoute.post("/login", adminLogin);
+adminRoute.post("/login", authLimiter, adminLogin);
 adminRoute.post("/logout", verifyAdmin, adminLogout);
 
 

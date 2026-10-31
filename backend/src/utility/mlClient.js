@@ -1,7 +1,8 @@
 const axios = require("axios");
 
-// /predict makes two Groq calls of up to 10s each, plus model time
-const ML_TIMEOUT_MS = 30000;
+// Long enough for a sleeping free-tier ML service to wake (about a minute)
+// and then finish /predict, which makes two Groq calls of up to 10s each
+const ML_TIMEOUT_MS = 90000;
 
 const postToMl = (path, payload) =>
   axios.post(`${process.env.ML_API_URL}${path}`, payload, {

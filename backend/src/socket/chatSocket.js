@@ -6,6 +6,8 @@ const {Conversation} = require('../models/conversation.model');
 const {User} = require('../models/user.model');
 const {isParticipant} = require('../utility/chatAccess');
 
+const MAX_MESSAGE_LENGTH = 2000;
+
 module.exports = (io) => {
   // Socket ka user cookie ke JWT se aata hai, client ke data se nahi
   io.use(async (socket, next) => {
@@ -47,7 +49,7 @@ module.exports = (io) => {
     socket.on('send_message', async (data) => {
       try {
         const { conversationId, text } = data || {};
-        if (typeof text !== 'string' || !text.trim()) return;
+        if (typeof text !== 'string' || !text.trim() || text.length > MAX_MESSAGE_LENGTH) return;
 
         const convo = await Conversation.findById(conversationId);
         if (!convo || !isParticipant(convo, userId)) return;

@@ -11,6 +11,7 @@ const { eventCreate } = require("./organizer.controller");
 const {EventFeedBack}=require("../models/eventFeedBack.model")
 const { postToMl } = require("../utility/mlClient")
 const { escapeRegex } = require("../utility/escapeRegex")
+const { eventCutoff } = require("../utility/eventDates")
 
 const DEFAULT_FEEDBACK_RATINGS = Object.freeze({
     organizerReputation: 0.5,
@@ -219,7 +220,7 @@ const getAllEvents = asyncHandler(async (req, res) => {
 
     const filter = {
         isDeleted: false,
-        date: { $gte: new Date() }
+        date: { $gte: eventCutoff() }
     }
 
     if (req.query.search) {
@@ -392,7 +393,7 @@ const getEventById = asyncHandler(async (req, res) => {
                             as: "e",
                             cond: {
                                 $and: [
-                                    { $lt: ["$$e.date", new Date()] },
+                                    { $lt: ["$$e.date", eventCutoff()] },
                                     { $eq: ["$$e.isDeleted", false] }
                                 ]
                             }
@@ -431,7 +432,7 @@ const giveFeedback = asyncHandler(async (req, res) => {
         _id: req.params.id,
         isDeleted: false,
         isExpired:true,
-        date: { $lt: new Date() }
+        date: { $lt: eventCutoff() }
     })
 
     if (!event) {
@@ -550,7 +551,7 @@ const getPrediction = asyncHandler(async (req, res) => {
             $match: {
                 _id: new mongoose.Types.ObjectId(req.params.eventId),
                 isDeleted: false,
-                date: { $gte: new Date() }
+                date: { $gte: eventCutoff() }
             }
         },
 
@@ -586,7 +587,7 @@ const getPrediction = asyncHandler(async (req, res) => {
                             as: "e",
                             cond: {
                                 $and: [
-                                    { $lt: ["$$e.date", new Date()] },
+                                    { $lt: ["$$e.date", eventCutoff()] },
                                     { $eq: ["$$e.isDeleted", false] }
                                 ]
                             }
@@ -602,7 +603,7 @@ const getPrediction = asyncHandler(async (req, res) => {
                                 as: "e",
                                 cond: {
                                     $and: [
-                                        { $lt: ["$$e.date", new Date()] },
+                                        { $lt: ["$$e.date", eventCutoff()] },
                                         { $eq: ["$$e.isDeleted", false] }
                                     ]
                                 }
@@ -716,7 +717,7 @@ const getCompletedEvents = asyncHandler(async (req, res) => {
 
     const filter = {
         isDeleted: false,
-        date: { $lt: new Date() }
+        date: { $lt: eventCutoff() }
     }
 
     if (req.query.search) {

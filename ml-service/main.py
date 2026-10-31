@@ -73,7 +73,7 @@ _current_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(_current_dir, ".env"))
 
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL: str   = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL: str   = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 # Comma-separated origins in .env:
 # ALLOWED_ORIGINS=http://localhost:3000,https://myapp.com
@@ -90,6 +90,7 @@ ALLOWED_ORIGINS: List[str] = [
 # API Key Authentication
 # ─────────────────────────────────────────────────────────────
 SERVICE_API_KEY: str = os.getenv("SERVICE_API_KEY", "")
+DEV_MODE: bool = os.getenv("DEV_MODE", "").lower() in ("1", "true", "yes")
 
 _api_key_header = APIKeyHeader(
     name="X-API-Key",
@@ -187,6 +188,8 @@ def _models_ready() -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global groq_client
+    if not SERVICE_API_KEY and not DEV_MODE:
+        raise RuntimeError("SERVICE_API_KEY must be set unless DEV_MODE is on.")
     logger.info("SponsorWise ML Service starting...")
     _load_artifacts()
     groq_client = _init_groq()
@@ -752,7 +755,13 @@ def _groq_chat(
     max_tokens: int = 600,
     temperature: float = 0.25,
 ) -> Optional[str]:
-    """Central entry point for every Groq API call with uniform error handling."""
+    """
+    Central entry point for every Groq API call with uniform error handling.
+
+    Every prompt here asks for JSON, so JSON mode is always on. The default model
+    reasons before answering; max_tokens leaves room for that, and low effort
+    keeps calls inside the timeout.
+    """
     if groq_client is None:
         return None
     try:
@@ -760,7 +769,9 @@ def _groq_chat(
             model=GROQ_MODEL,
             messages=messages,
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_tokens,
+            reasoning_effort="low",
+            response_format={"type": "json_object"},
             timeout=10.0,
         )
         return completion.choices[0].message.content
@@ -798,7 +809,7 @@ def get_ai_synergy(
             {"role": "system", "content": "You are a sponsorship evaluator. Output ONLY valid JSON."},
             {"role": "user",   "content": prompt},
         ],
-        max_tokens=60,
+        max_tokens=300,
         temperature=0.10,
     )
     parsed = extract_json(raw or "")
@@ -1052,7 +1063,7 @@ Return ONLY valid JSON with these EXACT keys:
             {"role": "system", "content": "You are a sponsorship strategist. Output ONLY valid JSON."},
             {"role": "user",   "content": prompt},
         ],
-        max_tokens=950,
+        max_tokens=1500,
         temperature=0.25,
     )
     parsed = extract_json(raw or "")
@@ -1193,7 +1204,7 @@ def analyze_brand(
             {"role": "system", "content": "You output ONLY valid JSON. No Markdown."},
             {"role": "user",   "content": prompt},
         ],
-        max_tokens=400,
+        max_tokens=600,
         temperature=0.25,
     )
     parsed = extract_json(raw or "")
@@ -1446,6 +1457,6 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=int(os.getenv("PORT", "8000")),
-        reload=os.getenv("DEV_MODE", "").lower() in ("1", "true", "yes"),
+        reload=DEV_MODE,
         log_level="info",
     )

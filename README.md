@@ -58,7 +58,7 @@ SponsorWise solves this by acting as an intelligent matchmaker - giving organize
 │  ┌─────────────────────────────────────────────────┐ │
 │  │  Stage 1: XGBoost Attendance Predictor          │ │
 │  │  Stage 2: XGBoost Sponsor Acceptance Classifier │ │
-│  │  Groq LLM (llama-3.3-70b): Synergy + Insights  │ │
+│  │  Groq LLM (gpt-oss-120b): Synergy + Insights   │ │
 │  └─────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────┘
 ```
@@ -72,7 +72,7 @@ SponsorWise solves this by acting as an intelligent matchmaker - giving organize
 | **Frontend** | React 19, Vite, Tailwind CSS, React Router v7, Socket.io-client, Axios |
 | **Backend** | Node.js, Express 5, MongoDB, Mongoose, JWT, bcryptjs, Nodemailer, Multer, Cloudinary, Socket.io, node-cron |
 | **ML Service** | Python, FastAPI, XGBoost, scikit-learn, pandas, NumPy, Groq SDK, joblib, Pydantic v2, Uvicorn |
-| **LLM** | Groq API - `llama-3.3-70b-versatile` |
+| **LLM** | Groq API - `openai/gpt-oss-120b` |
 | **Infra** | Vercel (frontend), environment-configurable origins for backend and ML |
 
 ---
@@ -331,7 +331,7 @@ npm run dev
 
 ```
 GROQ_API_KEY=           # Groq API key (optional)
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=openai/gpt-oss-120b
 ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 SERVICE_API_KEY=        # Shared secret with backend
 PORT=8000
@@ -351,7 +351,9 @@ CLIENT_ORIGIN=http://localhost:5173
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
-EMAIL_USER=
+BREVO_API_KEY=          # Production email; EMAIL_FROM must be a verified Brevo sender
+EMAIL_FROM=
+EMAIL_USER=             # Local development only (Gmail SMTP)
 EMAIL_PASSWORD=
 ML_API_URL=http://localhost:8000
 ML_API_KEY=             # Must match SERVICE_API_KEY in ML service

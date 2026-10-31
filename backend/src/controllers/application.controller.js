@@ -5,6 +5,7 @@ const { SponsorApplication } = require("../models/sponsorApplication.model")
 const { ApiError } = require("../utility/ApiError")
 const { ApiResponse } = require("../utility/ApiResponse")
 const { asyncHandler } = require("../utility/AsyncHandler")
+const { eventCutoff } = require("../utility/eventDates")
 
 const MAX_MESSAGE_LENGTH = 1000
 
@@ -52,7 +53,7 @@ const applyToEvent = asyncHandler(async (req, res) => {
         isDeleted: false,
         isExpired: false,
         status: "upcoming",
-        date: { $gte: new Date() }
+        date: { $gte: eventCutoff() }
     })
 
     if (!event) {

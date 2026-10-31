@@ -6,8 +6,19 @@ const {ApiResponse}=require("../utility/ApiResponse.js")
 const {asyncHandler}=require("../utility/AsyncHandler.js");
 const { Otp } = require("../models/otp.model.js");
 const { sendEmail } = require("../utility/sendEmail.js");
+const { cookieOptions } = require("../utility/cookieOptions.js");
 
 const MAX_OTP_ATTEMPTS=5;
+const OTP_RESEND_COOLDOWN_MS=1000*60;
+const SESSION_COOKIE_MAX_AGE=1000*60*60*24*7;
+
+// Limits email to one address, whichever IP the requests come from
+const assertOtpCooldown=async(userId)=>{
+    const lastOtp=await Otp.findOne({user:userId}).sort({createdAt:-1});
+    if(lastOtp && Date.now()-lastOtp.createdAt.getTime()<OTP_RESEND_COOLDOWN_MS){
+        throw new ApiError(429,"Please wait a minute before requesting another OTP")
+    }
+}
 
 const generateOtp=()=>{
     const otp=crypto.randomInt(100000,1000000).toString();
@@ -191,17 +202,7 @@ const login=asyncHandler(async(req,res)=>{
 
     const loggedInUser=await User.findById(checkUser._id).select("-password -refreshToken")
 
-    return res.status(200).cookie("accessToken",accessToken,{
-        httpOnly:true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge:1000*60*60*24*7,
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    }).cookie("refreshToken",refreshToken,{
-        httpOnly:true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-        maxAge:1000*60*60*24*7
-    }).json(
+    return res.status(200).cookie("accessToken",accessToken,{...cookieOptions(),maxAge:SESSION_COOKIE_MAX_AGE}).cookie("refreshToken",refreshToken,{...cookieOptions(),maxAge:SESSION_COOKIE_MAX_AGE}).json(
         new ApiResponse(200,
             {
                 user:loggedInUser,
@@ -214,11 +215,7 @@ const login=asyncHandler(async(req,res)=>{
 
 const logout=asyncHandler(async(req,res)=>{
     await User.findByIdAndUpdate(req.user._id,{$unset:{refreshToken:1}},{new:true})
-    const options={
-        httpOnly:true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    }
+    const options=cookieOptions()
     return res.status(200)
     .clearCookie("accessToken",options)
     .clearCookie("refreshToken",options)
@@ -253,12 +250,7 @@ const refreshAccessToken=asyncHandler(async(req,res)=>{
 
     const {accessToken,refreshToken:newRefreshToken}=await generateRefreshAccessToken(user._id)
 
-    const options={
-        httpOnly:true,
-        maxAge:1000*60*60*24*7,
-        secure:process.env.NODE_ENV==="production",
-        sameSite:process.env.NODE_ENV==="production"?"none":"lax"
-    }
+    const options={...cookieOptions(),maxAge:SESSION_COOKIE_MAX_AGE}
 
     return res.status(200).cookie("accessToken",accessToken,options)
     .cookie("refreshToken",newRefreshToken,options)
@@ -300,11 +292,7 @@ const changePassword=asyncHandler(async(req,res)=>{
     user.refreshToken=undefined;
     await user.save()
 
-    const options={
-        httpOnly:true,
-        secure:process.env.NODE_ENV==="production",
-        sameSite:process.env.NODE_ENV==="production"?"none":"lax"
-    }
+    const options=cookieOptions()
     return res.status(200).clearCookie("accessToken",options).clearCookie("refreshToken",options).json(
         new ApiResponse(200,
             {},
@@ -335,14 +323,15 @@ const resendVerificationOtp=asyncHandler(async(req,res)=>{
     }
 
     const user=await User.findOne({email});
-    if(!user){
-        throw new ApiError(404,"User not found")
+
+    // Same reply either way, so this can't be used to find out who has an account
+    if(!user || user.isVerified){
+        return res.status(200).json(
+            new ApiResponse(200,{},"Otp sent Successfully")
+        )
     }
 
-    if(user.isVerified){
-        throw new ApiError(400,"User already verified");
-    }
-
+    await assertOtpCooldown(user._id);
     await Otp.deleteMany({user:user._id});
 
     const otp=generateOtp();
@@ -374,9 +363,15 @@ const forgetPassword=asyncHandler(async(req,res)=>{
     }
 
     const user=await User.findOne({email:email.toLowerCase()})
+
+    // Same reply either way, so this can't be used to find out who has an account
     if(!user){
-        throw new ApiError(404,"User not found")
+        return res.status(200).json(
+            new ApiResponse(200,{},"Password reset Otp sent successfully")
+        )
     }
+
+    await assertOtpCooldown(user._id);
 
     const otp=generateOtp();
 
@@ -412,11 +407,11 @@ const resetPassword=asyncHandler(async(req,res)=>{
         throw new ApiError(400,"All fields are required")
     }
     const user=await User.findOne({email:email.toLowerCase()}).select("+password");
-    if(!user){
-        throw new ApiError(404,"user not found")
-    }
     if(newPassword!==confirmPassword){
         throw new ApiError(400,"Password is mismatching")
+    }
+    if(!user){
+        throw new ApiError(400,"OTP expired or not found")
     }
 
     const otpRecords=await Otp.findOne({user:user._id,expiresAt:{$gt:new Date()}})
@@ -432,11 +427,7 @@ const resetPassword=asyncHandler(async(req,res)=>{
 
     await otpRecords.deleteOne({user:user._id});
 
-    const options={
-        httpOnly:true,
-        secure:process.env.NODE_ENV==="production",
-        sameSite:process.env.NODE_ENV==="production"?"none":"lax"
-    }
+    const options=cookieOptions()
     return res.status(200).clearCookie("accessToken",options).clearCookie("refreshToken",options).json(
         new ApiResponse(200,
             {},
@@ -455,11 +446,7 @@ const deleteAccount=asyncHandler(async(req,res)=>{
     }
     await Otp.deleteMany({user:req.user._id});
     
-    const options={
-        httpOnly:true,
-        secure:process.env.NODE_ENV=="production",
-        sameSite:process.env.NODE_ENV=="production"?"none":"lax"
-    };
+    const options=cookieOptions();
     res.status(200)
     .clearCookie("accessToken",options)
     .clearCookie("refreshToken",options)

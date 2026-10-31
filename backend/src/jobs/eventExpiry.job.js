@@ -1,11 +1,11 @@
 const cron=require("node-cron");
 const {Organizer}=require("../models/organizer.model.js")
+const {eventCutoff}=require("../utility/eventDates.js")
 
-cron.schedule("* * * * *",async()=>{
+const expireEvents=async()=>{
    try {
-     const now=new Date();
      await Organizer.updateMany(
-         {date:{$lte:now},isExpired:false},
+         {date:{$lt:eventCutoff()},isExpired:false},
          {$set:{
              status:"completed",
              isExpired:true
@@ -14,6 +14,12 @@ cron.schedule("* * * * *",async()=>{
    } catch (err) {
         console.error("error updating expired event",err);
    }
-    
-});
+}
 
+const startEventExpiryJob=()=>{
+    // Free hosting sleeps when idle, so catch up on boot before the schedule resumes
+    expireEvents();
+    cron.schedule("* * * * *",expireEvents);
+}
+
+module.exports={startEventExpiryJob}

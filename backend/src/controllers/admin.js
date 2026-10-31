@@ -10,6 +10,7 @@ const { ApiError } = require("../utility/ApiError");
 const { ApiResponse } = require("../utility/ApiResponse");
 const { asyncHandler } = require("../utility/AsyncHandler");
 const { escapeRegex } = require("../utility/escapeRegex");
+const { cookieOptions } = require("../utility/cookieOptions");
 
 // ─── Admin Auth ───────────────────────────────────────────────────
 
@@ -33,20 +34,15 @@ const adminLogin = asyncHandler(async (req, res) => {
         { expiresIn: "24h" }
     );
 
-    res.cookie("adminToken", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 24 * 60 * 60 * 1000
-    });
+    res.cookie("adminToken", token, { ...cookieOptions(), maxAge: 24 * 60 * 60 * 1000 });
 
     return res.status(200).json(
-        new ApiResponse(200, { token, username: ADMIN_USER }, "Admin login successful")
+        new ApiResponse(200, { username: ADMIN_USER }, "Admin login successful")
     );
 });
 
 const adminLogout = asyncHandler(async (req, res) => {
-    res.clearCookie("adminToken");
+    res.clearCookie("adminToken", cookieOptions());
     return res.status(200).json(new ApiResponse(200, null, "Admin logged out"));
 });
 

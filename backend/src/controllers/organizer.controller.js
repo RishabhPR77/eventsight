@@ -6,6 +6,7 @@ const { Organizer } = require("../models/organizer.model.js");
 const { uploadOnCloudinary } = require("../utility/cloudinary.js");
 const { EventCategory } = require("../models/eventCategory.model.js");
 const { escapeRegex } = require("../utility/escapeRegex.js");
+const { eventCutoff } = require("../utility/eventDates.js");
 
 
 const DEFAULT_FEEDBACK_RATINGS = Object.freeze({
@@ -164,11 +165,11 @@ const getOrganizerEvents = asyncHandler(async (req, res) => {
     }
 
     if (req.query.type === "active" || req.query.type === "upcoming") {
-        filter.date = { $gte: new Date() };
+        filter.date = { $gte: eventCutoff() };
     }
 
     if (req.query.type === "expired" || req.query.type === "completed") {
-        filter.date = { $lt: new Date() };
+        filter.date = { $lt: eventCutoff() };
     }
 
     if (req.query.search) {
@@ -224,7 +225,7 @@ const getOrganizerEvents = asyncHandler(async (req, res) => {
             $addFields: {
                 ...buildFeedbackAggregateFields(),
                 status: {
-                    $cond: { if: { $lt: ["$date", new Date()] }, then: "completed", else: "upcoming" }
+                    $cond: { if: { $lt: ["$date", eventCutoff()] }, then: "completed", else: "upcoming" }
                 }
             }
         },
@@ -246,7 +247,7 @@ const getOrganizerEvents = asyncHandler(async (req, res) => {
                     { $count: "count" }
                 ],
                 pastEventsCount: [
-                    { $match: { date: { $lt: new Date() } } },
+                    { $match: { date: { $lt: eventCutoff() } } },
                     { $count: "count" }
                 ]
             }
@@ -325,7 +326,7 @@ const getOrganizerEventsById = asyncHandler(async (req, res) => {
             $addFields: {
                 ...buildFeedbackAggregateFields(),
                 status: {
-                    $cond: { if: { $lt: ["$date", new Date()] }, then: "completed", else: "upcoming" }
+                    $cond: { if: { $lt: ["$date", eventCutoff()] }, then: "completed", else: "upcoming" }
                 }
             }
         }
@@ -422,8 +423,8 @@ const updateEvent = asyncHandler(async (req, res) => {
     if (updateData.date) {
         const newDate = new Date(updateData.date)
 
-        if (newDate <= new Date()) {
-            throw new ApiError(400, "Event date must be in future")
+        if (newDate < eventCutoff()) {
+            throw new ApiError(400, "Event date must be today or later")
         }
     }
 

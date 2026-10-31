@@ -1,4 +1,5 @@
 const mongoose=require("mongoose")
+const {eventCutoff}=require("../utility/eventDates.js")
 const organizerSchema=new mongoose.Schema({
     organizer:{
         type:mongoose.Schema.Types.ObjectId,
@@ -38,9 +39,9 @@ const organizerSchema=new mongoose.Schema({
         index:true,
         validate:{
             validator:function(value){
-                return value>new Date();
+                return value>=eventCutoff();
             },
-            message:"Event date must be in future"
+            message:"Event date must be today or later"
         }
     },
     ask:{ //sponsor amount

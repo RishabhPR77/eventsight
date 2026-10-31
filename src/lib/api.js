@@ -4,8 +4,8 @@ import axios from "axios";
 const rawBase = import.meta.env.VITE_BACKEND_BASE_URL || "http://localhost:8080/api";
 export const BACKEND_BASE = rawBase.endsWith("/") ? rawBase : rawBase + "/";
 
-// ML calls run LLM steps; the backend gives each ML request up to 30s
-const ML_TIMEOUT_MS = 65000;
+// Free hosting sleeps, so a prediction can include the ML service waking up
+const ML_TIMEOUT_MS = 130000;
 
 // Axios instance for Node backend
 export const backend = axios.create({
