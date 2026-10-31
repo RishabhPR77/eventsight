@@ -17,7 +17,6 @@ SponsorWise is a full-stack AI-powered platform that helps event organizers in M
 - [Backend (Sujal Hammad)](#backend)
 - [Frontend (Joint Work)](#frontend)
 - [Dataset](#dataset)
-- [API Reference](#api-reference)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
 - [Team](#team)
@@ -139,19 +138,31 @@ The ML service is a self-contained FastAPI microservice that exposes the predict
 **Stage 1 - Attendance Predictor**  
 Predicts expected event attendance given venue capacity, marketing budget, ticket price, organizer reputation, lineup quality, event type, city, date context, weather, and competition.
 
-A clamping function converts raw model output to realistic fill-rate estimates tuned for Tier-2/3 MP city events:
+A clamping function converts raw model output to realistic fill-rate estimates tuned for Tier-2/3 MP city events. Fill never decreases as demand rises:
 - Demand ≥ 1.4× capacity → cap at ~82% fill (true sellouts are rare)
-- 1.0× ≤ demand < 1.4× → smooth fill between 55–82%
-- Demand < 1.0× → trust model output
+- 0.7× ≤ demand < 1.4× → compress smoothly from 70% to 82% fill
+- Demand < 0.7× → trust model output
 
 **Stage 2 - Sponsorship Acceptance Classifier**  
-Takes the scaled feature matrix from Stage 1 plus the raw attendance prediction as an additional feature and outputs:
+Takes the scaled feature matrix from Stage 1 plus the raw attendance prediction as an additional feature (out-of-fold during training) and outputs:
 - Binary acceptance prediction (will sponsor accept?)
 - Acceptance probability (used to generate potential bands: HIGH / MEDIUM / LOW / UNLIKELY)
 
+### Evaluation
+
+Each event has 7 rows (one per candidate brand), so all splits are grouped by `event_id`; an event is never in both train and test. On a held-out 20% of events:
+
+| Model | Metric | Score |
+|---|---|---|
+| Stage 1 (attendance) | R² | 0.922 |
+| Stage 2 (feasibility) | Accuracy | 0.81 |
+| Stage 2 (feasibility) | F1, feasible class | 0.73 |
+
+The data is synthetic, so these scores describe how well the models recover the generator, not real-world accuracy.
+
 ### Feature Engineering (67 Features)
 
-- **Calendar:** month, day of week, is_weekend, is_festive  
+- **Calendar:** month, day of week, is_weekend, is_festive (set by the organizer per event)  
 - **Weather:** temperature, humidity, is_raining (MP monthly defaults)  
 - **Event:** type (one-hot), venue capacity, ticket price, marketing budget  
 - **Organizer:** reputation score, lineup quality, social media reach, past events organized  
@@ -177,7 +188,8 @@ Pure-Python fallbacks exist for all AI outputs - the service is fully functional
 
 - **Canonical normalization** - all event types and brand categories are normalized via regex before lookup, fixing a bug where hyphenated strings like `"stand-up comedy"` were never matched.
 - **No circular budget inflation** - `brand_annual_budget` is never derived from `sponsor_amount` to avoid input leakage.
-- **API key auth** - protected routes require `X-API-Key` header; unauthenticated in local dev when key is unset.
+- **API key auth** - protected routes require `X-API-Key` header; unauthenticated in local dev when key is unset. Only the backend holds the key: the browser reaches the ML service through `/api/ml/*`.
+- **Reference categories** - `Apparel` and `Business Conference` were dropped by `get_dummies(drop_first=True)`, so they are valid inputs encoded as all zeros.
 - **Request tracing** - every response carries `X-Request-ID` and `X-Response-Time-Ms` headers.
 - **NumPy pickle shim** - handles cross-version compatibility when loading `.pkl` artifacts.
 
@@ -201,7 +213,7 @@ A Node.js + Express REST API that manages all application data, user authenticat
 
 **Authentication & Users**
 - Role-based accounts: `organizer`, `sponsor`, `admin`
-- OTP-based email verification on registration (5-minute expiry)
+- OTP-based email verification on registration (5-minute expiry, 5 attempts per code)
 - JWT access + refresh token pair, stored in HTTP-only cookies
 - Forgot password / reset password via OTP email flow
 - bcryptjs password hashing
@@ -213,12 +225,13 @@ A Node.js + Express REST API that manages all application data, user authenticat
 - Receive post-event feedback that feeds back into reputation scores
 
 **Sponsor Domain**
-- Browse events and apply for sponsorship
+- Browse events
 - View deal analysis powered by the ML service
 - Access AI-generated negotiation points and cold email drafts
 
 **Real-time Chat** (Socket.io)
 - Room-based messaging between sponsors and organizers scoped to a specific event
+- Sockets and chat routes authenticate with the access-token cookie; only a conversation's two participants can read or send
 - Global notification delivery to the recipient's personal room
 - Persistent message history in MongoDB
 
@@ -231,7 +244,7 @@ A Node.js + Express REST API that manages all application data, user authenticat
 
 ### Database Models
 
-`User` · `Organizer` (events) · `Sponser` (sponsor profiles) · `SponsorApplication` · `Conversation` · `Message` · `OTP` · `EventCategory` · `EventFeedBack` · `City` · `SponsorBrandTypes` · `Admin`
+`User` · `Organizer` (events) · `Sponser` (sponsor profiles) · `SponsorApplication` (schema only, no routes yet) · `Conversation` · `Message` · `OTP` · `EventCategory` · `EventFeedBack` · `City` · `SponsorBrandTypes` · `Admin`
 
 ---
 
@@ -263,10 +276,11 @@ The ML models were trained on a synthetic dataset of ~70,000 event-sponsor recor
 | Rows | ~70,000 |
 | Features | 67 engineered features after one-hot encoding |
 | Geography | 25 MP cities (Indore, Bhopal, Gwalior, Ujjain, ...) |
-| Event types | 8 (Music Concert, Food Festival, College Fest, Cricket Screening, Sports Tournament, Tech Meetup, Standup Comedy, Religious/Cultural) |
-| Brand categories | 9 (FMCG, Beverage, Fintech, Edtech, Automobile, Telecom, Apparel, Beauty/Personal Care, Local Retail) |
-| Target 1 (Stage 1) | `predicted_attendance` (regression) |
-| Target 2 (Stage 2) | `sponsor_accepted` (binary classification) |
+| Events × brands | 10,000 events, 7 candidate brands each, from a pool of 800 |
+| Event types | 9 (Music Concert, Food Festival, College Fest, Cricket Screening, Sports Tournament, Tech Meetup, Business Conference, Standup Comedy, Religious/Cultural) |
+| Brand categories | 10 (FMCG, Beverage, Fintech, Edtech, Automobile, Telecom, Apparel, Beauty/Personal Care, Local Retail, Real Estate) |
+| Target 1 (Stage 1) | `actual_attendance` (regression) |
+| Target 2 (Stage 2) | `feasible_to_sponsor` (binary classification) |
 
 Weather defaults, festive months, city populations, and brand budget benchmarks are all calibrated to the MP regional context.
 
@@ -326,28 +340,31 @@ DEV_MODE=true
 ### Backend (`backend/.env`)
 
 ```
-PORT=5000
-MONGODB_URI=
-JWT_SECRET=
-JWT_REFRESH_SECRET=
+PORT=8080
+DATABASE_URI=
+ACCESS_TOKEN_SECRET=
 ACCESS_TOKEN_EXPIRY=15m
+REFRESH_TOKEN_SECRET=
 REFRESH_TOKEN_EXPIRY=7d
 CLIENT_ORIGIN=http://localhost:5173
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
 EMAIL_USER=
-EMAIL_PASS=
-ML_SERVICE_URL=http://localhost:8000
+EMAIL_PASSWORD=
+ML_API_URL=http://localhost:8000
 ML_API_KEY=             # Must match SERVICE_API_KEY in ML service
+ADMIN_USERNAME=
+ADMIN_PASSWORD=
 ```
 
 ### Frontend (`.env`)
 
 ```
-VITE_API_BASE_URL=http://localhost:5000
-VITE_ML_SERVICE_URL=http://localhost:8000
+VITE_BACKEND_BASE_URL=http://localhost:8080/api
 ```
+
+Never put the ML API key in a `VITE_` variable: those are published in the browser bundle.
 
 ---
 

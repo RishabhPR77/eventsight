@@ -5,6 +5,7 @@ const { ApiResponse } = require("../utility/ApiResponse.js");
 const { Organizer } = require("../models/organizer.model.js");
 const { uploadOnCloudinary } = require("../utility/cloudinary.js");
 const { EventCategory } = require("../models/eventCategory.model.js");
+const { escapeRegex } = require("../utility/escapeRegex.js");
 
 
 const DEFAULT_FEEDBACK_RATINGS = Object.freeze({
@@ -77,6 +78,7 @@ const eventCreate = asyncHandler(async (req, res) => {
         ticketPrice,
         marketingBudget,
         isIndoor,
+        isFestive,
         socialMediaAccount: rawSocial
     } = req.body;
 
@@ -130,6 +132,7 @@ const eventCreate = asyncHandler(async (req, res) => {
             ticketPrice,
             marketingBudget,
             isIndoor,
+            isFestive,
             socialMediaAccount,
             thumbnail: uploadThumbnail?.secure_url || uploadThumbnail?.url || null
         })
@@ -170,7 +173,7 @@ const getOrganizerEvents = asyncHandler(async (req, res) => {
 
     if (req.query.search) {
         filter.eventName = {
-            $regex: req.query.search,
+            $regex: escapeRegex(req.query.search),
             $options: "i"
         }
     }
@@ -181,7 +184,7 @@ const getOrganizerEvents = asyncHandler(async (req, res) => {
 
     if (req.query.location) {
         filter.location = {
-            $regex: req.query.location,
+            $regex: escapeRegex(req.query.location),
             $options: "i"
         }
     }
@@ -365,6 +368,7 @@ const updateEvent = asyncHandler(async (req, res) => {
         "ticketPrice",
         "marketingBudget",
         "isIndoor",
+        "isFestive",
         "socialMediaAccount"
     ]
 

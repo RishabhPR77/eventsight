@@ -13,6 +13,7 @@ const { organizerRoute } = require("./routes/organizer.routes.js")
 const { adminRoute } = require("./routes/admin.route.js")
 const { sponsorRoute } = require("./routes/sponsor.route.js")
 const { chatRoute } = require("./routes/chat.route.js")
+const { mlRoute } = require("./routes/ml.route.js")
 const http = require("http")
 const { Server } = require("socket.io")
 const chatSocket = require("./socket/chatSocket.js")
@@ -46,6 +47,7 @@ app.use("/api/organizer", organizerRoute)
 app.use("/api/admin", adminRoute)
 app.use("/api/sponsor", sponsorRoute)
 app.use("/api/chat", chatRoute)
+app.use("/api/ml", mlRoute)
 
 
 

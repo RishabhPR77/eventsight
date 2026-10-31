@@ -9,6 +9,7 @@ const { User } = require("../models/user.model");
 const { ApiError } = require("../utility/ApiError");
 const { ApiResponse } = require("../utility/ApiResponse");
 const { asyncHandler } = require("../utility/AsyncHandler");
+const { escapeRegex } = require("../utility/escapeRegex");
 
 // ─── Admin Auth ───────────────────────────────────────────────────
 
@@ -55,7 +56,7 @@ const createEventCategory = asyncHandler(async (req, res) => {
     const { name } = req.body;
     if (!name) throw new ApiError(400, "Name is required");
 
-    const existing = await EventCategory.findOne({ name: { $regex: new RegExp(`^${name.trim()}$`, "i") }, isDeleted: false });
+    const existing = await EventCategory.findOne({ name: { $regex: new RegExp(`^${escapeRegex(name.trim())}$`, "i") }, isDeleted: false });
     if (existing) throw new ApiError(400, "Category already exists");
 
     const eventC = await EventCategory.create({ name: name.trim() });
@@ -87,7 +88,7 @@ const createBrandType = asyncHandler(async (req, res) => {
     const { name } = req.body;
     if (!name) throw new ApiError(400, "Name is required");
 
-    const existing = await BrandType.findOne({ name: { $regex: new RegExp(`^${name.trim()}$`, "i") } });
+    const existing = await BrandType.findOne({ name: { $regex: new RegExp(`^${escapeRegex(name.trim())}$`, "i") } });
     if (existing) throw new ApiError(400, "Brand type already exists");
 
     const brandType = await BrandType.create({ name });
@@ -115,7 +116,7 @@ const createCity = asyncHandler(async (req, res) => {
     const { name } = req.body;
     if (!name) throw new ApiError(400, "Name is required");
 
-    const existing = await City.findOne({ name: { $regex: new RegExp(`^${name.trim()}$`, "i") }, isDeleted: false });
+    const existing = await City.findOne({ name: { $regex: new RegExp(`^${escapeRegex(name.trim())}$`, "i") }, isDeleted: false });
     if (existing) throw new ApiError(400, "City already exists");
 
     const city = await City.create({ name: name.trim() });
@@ -144,8 +145,8 @@ const getAllUsers = asyncHandler(async (req, res) => {
     if (req.query.role) filter.role = req.query.role;
     if (req.query.search) {
         filter.$or = [
-            { username: { $regex: req.query.search, $options: "i" } },
-            { email: { $regex: req.query.search, $options: "i" } }
+            { username: { $regex: escapeRegex(req.query.search), $options: "i" } },
+            { email: { $regex: escapeRegex(req.query.search), $options: "i" } }
         ];
     }
 
@@ -176,7 +177,7 @@ const getAllEventsAdmin = asyncHandler(async (req, res) => {
 
     const filter = { isDeleted: false };
     if (req.query.status) filter.status = req.query.status;
-    if (req.query.search) filter.eventName = { $regex: req.query.search, $options: "i" };
+    if (req.query.search) filter.eventName = { $regex: escapeRegex(req.query.search), $options: "i" };
 
     const result = await Organizer.aggregate([
         { $match: filter },

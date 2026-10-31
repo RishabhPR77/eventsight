@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { changePassword, updateProfile, deleteAccount, logout } from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -35,6 +36,7 @@ function InlineMessage({ type = "success", children }) {
 
 export default function SettingsPage() {
   const { user, setUser, setRole } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState({ profile: false, password: false, delete: false });
   const [profileError, setProfileError] = useState("");
   const [profileSuccess, setProfileSuccess] = useState("");
@@ -58,7 +60,12 @@ export default function SettingsPage() {
 
     setLoading((prev) => ({ ...prev, profile: true }));
     try {
-      await updateProfile({ username: username || undefined, email: email || undefined });
+      const res = await updateProfile({ username: username || undefined, email: email || undefined });
+      if (res?.data?.emailChanged) {
+        toast.success("Enter the code sent to your new email");
+        navigate("/verify-otp", { state: { email: res.data.user.email } });
+        return;
+      }
       setProfileSuccess("Profile updated successfully.");
       toast.success("Profile updated");
     } catch (err) {

@@ -131,6 +131,11 @@ function EventForm({ event, categories, cities, onSubmit, onClose, submitting })
             <label htmlFor="indoor-check" className="text-sm font-bold opacity-70">Indoor event</label>
           </div>
 
+          <div className="flex items-center gap-2">
+            <input name="isFestive" type="checkbox" defaultChecked={Boolean(event?.isFestive)} className="w-5 h-5 accent-[var(--accent)]" id="festive-check" />
+            <label htmlFor="festive-check" className="text-sm font-bold opacity-70">Falls during a festival</label>
+          </div>
+
           <SocialRows initial={event?.socialMediaAccount} />
 
           <div>
@@ -212,6 +217,7 @@ export default function OrganizerEventPage() {
       if (val !== undefined) form.append(f, val);
     });
     if (rawForm.elements.isIndoor) form.append("isIndoor", rawForm.elements.isIndoor.checked);
+    if (rawForm.elements.isFestive) form.append("isFestive", rawForm.elements.isFestive.checked);
     if (rawForm.elements.thumbnail?.files?.[0]) {
       form.append("thumbnail", rawForm.elements.thumbnail.files[0]);
     }

@@ -19,6 +19,7 @@ import {
   getAdminUsers,
 } from "@/lib/api";
 import { fmtINR, getErrorMessage } from "@/lib/utils";
+import { ML_BRAND_CATEGORIES, ML_CITIES, ML_EVENT_TYPES } from "@/lib/mlMappings";
 
 const cx = (...xs) => xs.filter(Boolean).join(" ");
 
@@ -285,8 +286,16 @@ export default function AdminPage() {
         <section className="workspace-panel grid xl:grid-cols-3 gap-5">
           <div className="surface-card">
             <div className="field-label">Event categories</div>
+            <p className="muted text-sm mt-1">Select the exact ML-recognised event types.</p>
             <div className="flex gap-3 mt-4 mb-5">
-              <input value={catName} onChange={(e) => setCatName(e.target.value)} className="input-field" placeholder="Add category" />
+              <select value={catName} onChange={(e) => setCatName(e.target.value)} className="input-field cursor-pointer">
+                <option value="" disabled>Choose an event category…</option>
+                {ML_EVENT_TYPES.map((name) => (
+                  <option key={name} value={name} disabled={categories.some((c) => c.name === name.toUpperCase())}>{
+                    categories.some((c) => c.name === name.toUpperCase()) ? `${name} — added` : name
+                  }</option>
+                ))}
+              </select>
               <button className="btn-primary" onClick={() => createItem("category", catName)}>Add</button>
             </div>
             <div className="grid gap-3 max-h-[380px] overflow-auto pr-1">
@@ -301,8 +310,16 @@ export default function AdminPage() {
 
           <div className="surface-card">
             <div className="field-label">Brand types</div>
+            <p className="muted text-sm mt-1">Select the exact ML-recognised brand categories.</p>
             <div className="flex gap-3 mt-4 mb-5">
-              <input value={brandName} onChange={(e) => setBrandName(e.target.value)} className="input-field" placeholder="Add brand type" />
+              <select value={brandName} onChange={(e) => setBrandName(e.target.value)} className="input-field cursor-pointer">
+                <option value="" disabled>Choose a brand type…</option>
+                {ML_BRAND_CATEGORIES.map((name) => (
+                  <option key={name} value={name} disabled={brandTypes.some((b) => b.name === name.toUpperCase())}>{
+                    brandTypes.some((b) => b.name === name.toUpperCase()) ? `${name} — added` : name
+                  }</option>
+                ))}
+              </select>
               <button className="btn-primary" onClick={() => createItem("brand", brandName)}>Add</button>
             </div>
             <div className="grid gap-3 max-h-[380px] overflow-auto pr-1">
@@ -317,8 +334,16 @@ export default function AdminPage() {
 
           <div className="surface-card">
             <div className="field-label">Cities</div>
+            <p className="muted text-sm mt-1">Select from the MP cities the ML model knows.</p>
             <div className="flex gap-3 mt-4 mb-5">
-              <input value={cityName} onChange={(e) => setCityName(e.target.value)} className="input-field" placeholder="Add city" />
+              <select value={cityName} onChange={(e) => setCityName(e.target.value)} className="input-field cursor-pointer">
+                <option value="" disabled>Choose a city…</option>
+                {ML_CITIES.map((name) => (
+                  <option key={name} value={name} disabled={cities.some((c) => c.name === name)}>{
+                    cities.some((c) => c.name === name) ? `${name} — added` : name
+                  }</option>
+                ))}
+              </select>
               <button className="btn-primary" onClick={() => createItem("city", cityName)}>Add</button>
             </div>
             <div className="grid gap-3 max-h-[380px] overflow-auto pr-1">

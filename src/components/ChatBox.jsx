@@ -103,8 +103,6 @@ export default function ChatBox({ eventId, sponsorId, organizerId, currentUserRo
 
     socket.emit("send_message", {
       conversationId: conversationId,
-      senderId: currentUserRole === "sponsor" ? sponsorId : organizerId,
-      senderRole: currentUserRole,
       text,
     });
     setText("");

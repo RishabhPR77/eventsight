@@ -76,6 +76,10 @@ const organizerSchema=new mongoose.Schema({
         type:Boolean,
         required:true
     },
+    isFestive:{
+        type:Boolean,
+        default:false
+    },
     socialMediaAccount:[
      {
         platform:{

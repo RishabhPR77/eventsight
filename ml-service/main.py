@@ -138,7 +138,9 @@ def _init_groq() -> Optional[Any]:
         logger.warning("GROQ_API_KEY not set — AI features disabled.")
         return None
     try:
-        c = _Groq(api_key=GROQ_API_KEY)
+        # No SDK retries: each call must stay within its timeout so the backend's
+        # request budget holds. Every AI output has a Python fallback.
+        c = _Groq(api_key=GROQ_API_KEY, max_retries=0)
         logger.info("Groq client initialized.")
         return c
     except Exception as exc:
@@ -327,7 +329,11 @@ EVENT_TAGS: Dict[str, List[str]] = {
     "Business Conference": ["professional"],
 }
 
+# "Business Conference" and "Apparel" are real training categories. They have no
+# one-hot column because get_dummies(drop_first=True) dropped them, so they are
+# encoded as all zeros and _set_onehot() is correctly a no-op for them.
 SUPPORTED_MODEL_EVENT_TYPES = {
+    "Business Conference",
     "College Fest",
     "Cricket Screening",
     "Food Festival",
@@ -339,6 +345,7 @@ SUPPORTED_MODEL_EVENT_TYPES = {
 }
 
 SUPPORTED_MODEL_BRAND_CATEGORIES = {
+    "Apparel",
     "Automobile",
     "Beauty/Personal Care",
     "Beverage",
@@ -384,7 +391,7 @@ EVENT_LOOKUP: Dict[str, str] = _build_lookup({
     "tech meetup":         "Tech Meetup",
     "tech meet up":        "Tech Meetup",
     "tech conference":     "Tech Meetup",
-    "business conference": "Tech Meetup",
+    "business conference": "Business Conference",
     "startup pitch":       "Tech Meetup",
     "hackathon":           "Tech Meetup",
     "college fest":        "College Fest",
@@ -426,17 +433,18 @@ BRAND_LOOKUP: Dict[str, str] = _build_lookup({
     "e commerce":           "Local Retail",
     "travel & tourism":     "Local Retail",
     "travel tourism":       "Local Retail",
-    "fashion & apparel":    "Local Retail",
-    "fashion":              "Local Retail",
-    "apparel":              "Local Retail",
-    "sports & fitness":     "Local Retail",
-    "sports fitness":       "Local Retail",
+    "fashion & apparel":    "Apparel",
+    "fashion":              "Apparel",
+    "apparel":              "Apparel",
+    "sports & fitness":     "Apparel",
+    "sports fitness":       "Apparel",
     "automobile":           "Automobile",
 })
 
 
 def _contains_any(blob: str, terms: List[str]) -> bool:
-    return any(term in blob for term in terms)
+    """Match whole words (plural allowed) so 'ev' does not hit 'event'."""
+    return any(re.search(rf"\b{re.escape(term)}s?\b", blob) for term in terms)
 
 
 def canonical_city(s: str) -> str:
@@ -469,6 +477,8 @@ def canonical_event_type(s: str, event_description: Optional[str] = None) -> str
         return "College Fest"
     if _contains_any(blob, ["sports", "tournament", "match", "gaming", "esports"]):
         return "Sports Tournament"
+    if _contains_any(blob, ["business conference", "corporate"]):
+        return "Business Conference"
     if _contains_any(blob, ["tech", "startup", "conference", "summit", "hackathon", "meetup", "pitch", "expo"]):
         return "Tech Meetup"
     if _contains_any(blob, ["cricket", "screening", "watch party"]):
@@ -506,7 +516,9 @@ def canonical_brand_category(
         return "Automobile"
     if _contains_any(blob, ["technology", "tech", "telecom", "software", "electronics", "media", "streaming", "entertainment", "digital"]):
         return "Telecom"
-    if _contains_any(blob, ["retail", "e commerce", "ecommerce", "marketplace", "travel", "tourism", "hotel", "restaurant", "fashion", "apparel", "fitness", "sportswear"]):
+    if _contains_any(blob, ["fashion", "apparel", "clothing", "fitness", "sportswear"]):
+        return "Apparel"
+    if _contains_any(blob, ["retail", "e commerce", "ecommerce", "marketplace", "travel", "tourism", "hotel", "restaurant"]):
         return "Local Retail"
 
     return "Local Retail"
@@ -536,41 +548,42 @@ def compute_fit_score(brand_cat: str, event_type: str) -> float:
     return float(np.clip(type_match * aud_score * 0.95, 0.25, 1.60))
 
 
+# fit_score range in the training data; synergy 0–100 must span exactly this.
+FIT_MIN, FIT_MAX = 0.25, 1.09
+
+
 def fit_to_synergy(fit_score: float) -> int:
-    """Convert internal fit decimal [0.55–1.25] to UI synergy percentage [0–100]."""
-    lo, hi = 0.55, 1.25
-    return int(np.clip((fit_score - lo) / (hi - lo) * 100, 0, 100))
+    """Convert internal fit decimal [FIT_MIN–FIT_MAX] to UI synergy percentage [0–100]."""
+    return int(np.clip((fit_score - FIT_MIN) / (FIT_MAX - FIT_MIN) * 100, 0, 100))
 
 
 def synergy_to_fit(synergy_score: int) -> float:
-    """Reverse-scale AI synergy [0–100] back to ML fit decimal [0.55–1.25]."""
-    lo, hi = 0.55, 1.25
-    return float(np.clip((synergy_score / 100.0) * (hi - lo) + lo, 0.25, 1.60))
+    """Reverse-scale AI synergy [0–100] back to ML fit decimal [FIT_MIN–FIT_MAX]."""
+    return float(np.clip((synergy_score / 100.0) * (FIT_MAX - FIT_MIN) + FIT_MIN, FIT_MIN, FIT_MAX))
 
 
 def clamp_attendance(pred_att_raw: float, capacity: int) -> int:
     """
     Convert raw model output to a realistic attendance figure.
 
-    Realistic fill-rate bands for Tier-2/3 MP city events:
-      demand >= 1.4x capacity  →  exceptional demand, cap at ~82%
-      1.0x <= demand < 1.4x   →  strong demand, smooth fill 55% → 82%
-      0.6x <= demand < 1.0x   →  trust model output (normal range)
-      demand < 0.6x            →  weak demand, trust model output
+    Realistic fill-rate bands for Tier-2/3 MP city events. Fill never decreases
+    as demand rises:
+      demand < 0.7x capacity   →  trust model output
+      0.7x <= demand < 1.4x    →  compress smoothly from 70% fill to 82%
+      demand >= 1.4x capacity  →  exceptional demand, cap at 82%
     """
     capacity = max(1, capacity)
     demand_ratio = pred_att_raw / capacity
 
     if demand_ratio >= 1.4:
-        result = int(capacity * 0.82)   # was 0.99 — true sellouts are rare
-    elif demand_ratio >= 1.0:
-        # Smooth fill: 55% at ratio=1.0, up to 82% at ratio=1.4
-        fill_factor = 0.55 + 0.27 * ((demand_ratio - 1.0) / 0.4)
-        result = int(capacity * fill_factor)
+        fill_factor = 0.82              # was 0.99 — true sellouts are rare
+    elif demand_ratio >= 0.7:
+        fill_factor = 0.70 + 0.12 * ((demand_ratio - 0.7) / 0.7)
     else:
-        result = int(pred_att_raw)      # model is within capacity, trust it
+        fill_factor = demand_ratio      # model is well within capacity, trust it
 
-    return int(np.clip(result, 0, capacity))
+    return int(np.clip(capacity * fill_factor, 0, capacity))
+
 
 def prob_band(prob: Optional[float]) -> Dict[str, str]:
     """Map acceptance probability to a human-readable potential tier."""
@@ -1102,6 +1115,10 @@ class EventInput(BaseModel):
     organizer_reputation:  Optional[float] = Field(None, ge=0.0, le=1.0)
     lineup_quality:        Optional[float] = Field(None, ge=0.0, le=1.0)
     is_indoor:             Optional[int]   = Field(None, ge=0, le=1)
+    is_festive:            Optional[int]   = Field(
+        None, ge=0, le=1,
+        description="1 if the event falls during a festival. Omitted means no.",
+    )
     social_media_reach:    Optional[int]   = Field(None, ge=0)
     past_events_organized: Optional[int]   = Field(None, ge=0)
 
@@ -1125,6 +1142,11 @@ class EventInput(BaseModel):
         except ValueError:
             raise ValueError("'date' must be in YYYY-MM-DD format.")
         return self
+
+
+def _default(value: Optional[float], fallback: float) -> float:
+    """Use fallback only when the field was omitted (fallbacks are training medians)."""
+    return fallback if value is None else value
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1208,7 +1230,9 @@ def predict(
     month       = dt.month
     day_of_week = dt.weekday()
     is_weekend  = int(day_of_week in (5, 6))
-    is_festive  = int(month in FESTIVE_MONTHS)
+    # Training flags ~45% of events in FESTIVE_MONTHS and none outside them, so
+    # the month alone cannot decide this: it comes from the organizer.
+    is_festive  = int(bool(data.is_festive) and month in FESTIVE_MONTHS)
     temperature, humidity, is_raining = MP_WEATHER_DEFAULTS.get(month, (25, 60, 0))
     competing_events = competition_expected(city, is_weekend, is_festive)
 
@@ -1224,9 +1248,10 @@ def predict(
     )
 
     # ── Quality signals ──────────────────────────────────────────
-    organizer_rep             = float(np.clip(data.organizer_reputation or 0.55, 0.05, 0.97))
-    lineup_q                  = float(np.clip(data.lineup_quality       or 0.50, 0.05, 0.98))
-    brand_activation_maturity = float(np.clip(data.brand_activation_maturity or 0.55, 0.0, 1.0))
+    # Test against None, not truthiness: 0 is a real value for all of these.
+    organizer_rep             = float(np.clip(_default(data.organizer_reputation, 0.55), 0.05, 0.97))
+    lineup_q                  = float(np.clip(_default(data.lineup_quality, 0.50), 0.05, 0.98))
+    brand_activation_maturity = float(np.clip(_default(data.brand_activation_maturity, 0.55), 0.0, 1.0))
     brand_kpi                 = data.brand_kpi        or "awareness"
     brand_city_focus          = data.brand_city_focus or "all_mp"
 
@@ -1271,8 +1296,8 @@ def predict(
         "marketing_budget":          float(max(0.0, data.marketing_budget)),
         "organizer_reputation":      organizer_rep,
         "lineup_quality":            lineup_q,
-        "social_media_reach":        float(max(0, data.social_media_reach or 15_000)),
-        "past_events_organized":     float(max(0, data.past_events_organized or 5)),
+        "social_media_reach":        float(max(0, _default(data.social_media_reach, 1_800))),
+        "past_events_organized":     float(max(0, _default(data.past_events_organized, 10))),
         "competing_events":          float(competing_events),
         "brand_annual_budget":       float(brand_annual_budget),
         "brand_activation_maturity": brand_activation_maturity,

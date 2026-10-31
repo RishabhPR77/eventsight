@@ -1,3 +1,4 @@
+const crypto=require("crypto")
 const jwt=require("jsonwebtoken")
 const { User } = require("../models/user.model.js");
 const {ApiError}=require("../utility/ApiError.js")
@@ -6,9 +7,25 @@ const {asyncHandler}=require("../utility/AsyncHandler.js");
 const { Otp } = require("../models/otp.model.js");
 const { sendEmail } = require("../utility/sendEmail.js");
 
+const MAX_OTP_ATTEMPTS=5;
+
 const generateOtp=()=>{
-    const otp=Math.floor(100000+Math.random()*900000).toString();
+    const otp=crypto.randomInt(100000,1000000).toString();
     return otp;
+}
+
+// Wrong guesses burn the code, so a 6-digit OTP can't be brute forced
+const checkOtp=async(otpRecord,otp)=>{
+    if(otpRecord.otp===String(otp)){
+        return;
+    }
+    otpRecord.attempts+=1;
+    if(otpRecord.attempts>=MAX_OTP_ATTEMPTS){
+        await otpRecord.deleteOne();
+        throw new ApiError(429,"Too many wrong attempts. Please request a new OTP")
+    }
+    await otpRecord.save();
+    throw new ApiError(400,"Invalid OTP")
 }
 
 const generateRefreshAccessToken=async (userId)=>{
@@ -132,14 +149,12 @@ const verifyOtp=asyncHandler(async(req,res)=>{
         throw new ApiError(400,"user already verified")
     }
 
-    const otpRecord=await Otp.findOne({user:user._id})
+    const otpRecord=await Otp.findOne({user:user._id,expiresAt:{$gt:new Date()}})
     if(!otpRecord){
         throw new ApiError(400,"OTP expired or not found")
     }
 
-    if(otpRecord.otp!==otp){
-        throw new ApiError(400,"Invalid OTP")
-    }
+    await checkOtp(otpRecord,otp);
 
     user.isVerified=true;
     await user.save();
@@ -409,9 +424,7 @@ const resetPassword=asyncHandler(async(req,res)=>{
         throw new ApiError(400,"OTP expired or not found")
     }
 
-    if(otpRecords.otp!==otp){
-        throw new ApiError(400,"Invalid otp")
-    }
+    await checkOtp(otpRecords,otp);
 
     user.password=newPassword;
     user.refreshToken=undefined;
@@ -473,13 +486,36 @@ const updateProfile=asyncHandler(async(req,res)=>{
         user.username=username.toLowerCase().trim();
     }
 
-    if(email){
-        const existingUser=await User.findOne({email})
+    const newEmail=email?.toLowerCase().trim();
+    const emailChanged=Boolean(newEmail) && newEmail!==user.email;
+
+    if(emailChanged){
+        const existingUser=await User.findOne({email:newEmail})
         if(existingUser && existingUser._id.toString()!==user._id.toString()){
             throw new ApiError(400,"Email alredy in use")
         }
 
-        user.email=email.toLowerCase().trim();
+        // Send the OTP first: a failed send must not leave the account unverifiable
+        const otp=generateOtp();
+        await Otp.deleteMany({user:user._id});
+        await Otp.create({
+            user:user._id,
+            otp,
+            expiresAt:new Date(Date.now()+1000*60*5)
+        })
+
+        try {
+            await sendEmail(
+                newEmail,
+                "Your Otp Code",
+                `Your otp is ${otp}. It will expires in 5 minute`
+            )
+        } catch (error) {
+            await Otp.deleteMany({user:user._id});
+            throw new ApiError(500,"Failed to send OTP email");
+        }
+
+        user.email=newEmail;
         user.isVerified=false;
     }
 
@@ -489,8 +525,8 @@ const updateProfile=asyncHandler(async(req,res)=>{
 
     return res.status(200).json(
         new ApiResponse(200,
-            {user:updatedUser},
-            "profile updated successfully"
+            {user:updatedUser,emailChanged},
+            emailChanged?"profile updated. please verify your new email":"profile updated successfully"
         )
     )
 

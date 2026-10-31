@@ -9,7 +9,8 @@ const { asyncHandler } = require("../utility/AsyncHandler");
 const { uploadOnCloudinary } = require("../utility/cloudinary");
 const { eventCreate } = require("./organizer.controller");
 const {EventFeedBack}=require("../models/eventFeedBack.model")
-const axios = require("axios")
+const { postToMl } = require("../utility/mlClient")
+const { escapeRegex } = require("../utility/escapeRegex")
 
 const DEFAULT_FEEDBACK_RATINGS = Object.freeze({
     organizerReputation: 0.5,
@@ -222,7 +223,7 @@ const getAllEvents = asyncHandler(async (req, res) => {
     }
 
     if (req.query.search) {
-        filter.eventName = { $regex: req.query.search, $options: "i" }
+        filter.eventName = { $regex: escapeRegex(req.query.search), $options: "i" }
     }
 
     if (req.query.category) {
@@ -230,7 +231,7 @@ const getAllEvents = asyncHandler(async (req, res) => {
     }
 
     if (req.query.location) {
-        filter.location = { $regex: req.query.location, $options: "i" }
+        filter.location = { $regex: escapeRegex(req.query.location), $options: "i" }
     }
 
     if (req.query.isIndoor !== undefined) {
@@ -661,58 +662,39 @@ const getPrediction = asyncHandler(async (req, res) => {
   
     let analyzeBrandResponse
     try {
-        analyzeBrandResponse = await axios.post(
-            `${process.env.ML_API_URL}/analyze-brand`,
-            {
-                company_name:      sponsorProfile.brandName,
-                industry:          sponsorProfile.brandType.name,
-                brand_description: sponsorProfile.description
-            },
-            {
-                headers: {
-                    "x-api-key":    process.env.ML_API_KEY,
-                    "Content-Type": "application/json"
-                }
-            }
-        )
+        analyzeBrandResponse = await postToMl("/analyze-brand", {
+            company_name:      sponsorProfile.brandName,
+            industry:          sponsorProfile.brandType.name,
+            brand_description: sponsorProfile.description
+        })
     } catch (error) {
         throw new ApiError(500, "Brand analysis failed")
     }
 
-    console.log(eventData.eventCategory?.name)
-    console.log(sponsorProfile.brandType.name)
     let predictResponse
     try {
-        predictResponse = await axios.post(
-            `${process.env.ML_API_URL}/predict`,
-            {
-                city:                      eventData.location,
-                event_type:                eventData.eventCategory?.name || "",
-                sponsor_category:          sponsorProfile.brandType.name,
-                brand_name:                sponsorProfile.brandName,
-                brand_description:         sponsorProfile.description,
-                event_description:         eventData.eventDescription,
-                date:                      new Date(eventData.date).toISOString().split("T")[0],
-                price:                     eventData.ticketPrice,
-                marketing_budget:          eventData.marketingBudget,
-                sponsor_amount:            eventData.ask,
-                venue_capacity:            eventData.capacity,
-                organizer_reputation:      avgOrganizerReputation,
-                lineup_quality:            avgLineupQuality,
-                brand_activation_maturity: avgActivationMaturity,
-                is_indoor:                 eventData.isIndoor ? 1 : 0,
-                social_media_reach:        eventData.totalSocialReach,
-                past_events_organized:     eventData.pastEventOrganized,
-                brand_kpi:                 sponsorProfile.brandKpi,
-                brand_city_focus:          sponsorProfile.cityFocus
-            },
-            {
-                headers: {
-                    "x-api-key":    process.env.ML_API_KEY,
-                    "Content-Type": "application/json"
-                }
-            }
-        )
+        predictResponse = await postToMl("/predict", {
+            city:                      eventData.location,
+            event_type:                eventData.eventCategory?.name || "",
+            sponsor_category:          sponsorProfile.brandType.name,
+            brand_name:                sponsorProfile.brandName,
+            brand_description:         sponsorProfile.description,
+            event_description:         eventData.eventDescription,
+            date:                      new Date(eventData.date).toISOString().split("T")[0],
+            price:                     eventData.ticketPrice,
+            marketing_budget:          eventData.marketingBudget,
+            sponsor_amount:            eventData.ask,
+            venue_capacity:            eventData.capacity,
+            organizer_reputation:      avgOrganizerReputation,
+            lineup_quality:            avgLineupQuality,
+            brand_activation_maturity: avgActivationMaturity,
+            is_indoor:                 eventData.isIndoor ? 1 : 0,
+            is_festive:                eventData.isFestive ? 1 : 0,
+            social_media_reach:        eventData.totalSocialReach,
+            past_events_organized:     eventData.pastEventOrganized,
+            brand_kpi:                 sponsorProfile.brandKpi,
+            brand_city_focus:          sponsorProfile.cityFocus
+        })
     } catch (error) {
         console.log(error.response?.data);
         throw new ApiError(500, "Prediction failed")
@@ -738,7 +720,7 @@ const getCompletedEvents = asyncHandler(async (req, res) => {
     }
 
     if (req.query.search) {
-        filter.eventName = { $regex: req.query.search, $options: "i" }
+        filter.eventName = { $regex: escapeRegex(req.query.search), $options: "i" }
     }
 
     const result = await Organizer.aggregate([

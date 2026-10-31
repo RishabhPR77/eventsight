@@ -65,6 +65,13 @@ export default function DealPanel({
           <input type="date" value={dealData.date} onChange={(e) => setDealData((d) => ({ ...d, date: e.target.value }))} className="input-field w-full" required />
         </InputBlock>
 
+        <InputBlock label="Festival period" note="Does the event fall during a festival?">
+          <select value={dealData.is_festive} onChange={(e) => setDealData((d) => ({ ...d, is_festive: Number(e.target.value) }))} className="select-field w-full">
+            <option value={0}>No</option>
+            <option value={1}>Yes</option>
+          </select>
+        </InputBlock>
+
         <InputBlock label="Sponsor ask" note="How much funding the organizer is requesting.">
           <input type="number" value={dealData.sponsor_amount} onChange={(e) => setDealData((d) => ({ ...d, sponsor_amount: e.target.value }))} className="input-field w-full" />
         </InputBlock>

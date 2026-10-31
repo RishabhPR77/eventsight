@@ -1,24 +1,11 @@
 import axios from "axios";
 
-// ML service base URL (used by SponsorWise playground screen)
-export const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
-
-// Node backend base URL (main app talks only to this)
+// Node backend base URL (the app talks only to this; it holds the ML API key)
 const rawBase = import.meta.env.VITE_BACKEND_BASE_URL || "http://localhost:8080/api";
 export const BACKEND_BASE = rawBase.endsWith("/") ? rawBase : rawBase + "/";
 
-// Secret API Key for ML service (no hardcoded fallback)
-export const API_KEY = import.meta.env.VITE_SERVICE_API_KEY;
-
-// Axios instance for ML service
-export const api = axios.create({
-  baseURL: API_BASE,
-  timeout: 25000,
-  headers: {
-    "X-API-Key": API_KEY,
-    "Content-Type": "application/json",
-  },
-});
+// ML calls run LLM steps; the backend gives each ML request up to 30s
+const ML_TIMEOUT_MS = 65000;
 
 // Axios instance for Node backend
 export const backend = axios.create({
@@ -28,16 +15,16 @@ export const backend = axios.create({
 });
 
 // ─────────────────────────────
-// ML service calls (playground)
+// ML calls via backend (playground)
 // ─────────────────────────────
 
 export async function analyzeBrand(payload) {
-  const { data } = await api.post("/analyze-brand", payload);
+  const { data } = await backend.post("ml/analyze-brand", payload, { timeout: ML_TIMEOUT_MS });
   return data;
 }
 
 export async function predictDeal(payload) {
-  const { data } = await api.post("/predict", payload);
+  const { data } = await backend.post("ml/predict", payload, { timeout: ML_TIMEOUT_MS });
   return data;
 }
 
@@ -229,7 +216,7 @@ export async function updateEventFeedback(eventId, payload) {
 
 // Backend → ML prediction chain
 export async function getEventPrediction(eventId) {
-  const { data } = await backend.get(`sponsor/predict/${eventId}`);
+  const { data } = await backend.get(`sponsor/predict/${eventId}`, { timeout: ML_TIMEOUT_MS });
   return data;
 }
 

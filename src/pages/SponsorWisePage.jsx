@@ -6,28 +6,13 @@ import ResultsPanel from "@/components/results/ResultsPanel";
 
 import { analyzeBrand, predictDeal, fetchBrandTypes, fetchEventCategories } from "@/lib/api";
 import { getErrorMessage, clampNum } from "@/lib/utils";
+import { ML_BRAND_CATEGORIES, ML_CITIES, ML_EVENT_TYPES } from "@/lib/mlMappings";
 
 export default function SponsorWisePage() {
   const [step, setStep] = useState(1);
 
-  const BRAND_CATEGORIES_FALLBACK = [
-    "Automobile", "Beauty/Personal Care", "Beverage", "Edtech", "FMCG",
-    "Fintech", "Local Retail", "Real Estate", "Telecom",
-  ];
-
-  const EVENT_TYPES_FALLBACK = [
-    "College Fest", "Cricket Screening", "Food Festival", "Music Concert",
-    "Religious/Cultural", "Sports Tournament", "Standup Comedy", "Tech Meetup",
-  ];
-
-  const CITIES = [
-    "Bhopal", "Burhanpur", "Chhindwara", "Damoh", "Dewas", "Gwalior", "Indore", "Jabalpur", "Katni",
-    "Khandwa", "Khargone", "Mandsaur", "Morena", "Narmadapuram", "Neemuch", "Ratlam", "Rewa",
-    "Sagar", "Satna", "Sehore", "Seoni", "Shivpuri", "Singrauli", "Ujjain", "Vidisha",
-  ];
-
-  const [brandCategories, setBrandCategories] = useState(BRAND_CATEGORIES_FALLBACK);
-  const [eventTypes, setEventTypes] = useState(EVENT_TYPES_FALLBACK);
+  const [brandCategories, setBrandCategories] = useState(ML_BRAND_CATEGORIES);
+  const [eventTypes, setEventTypes] = useState(ML_EVENT_TYPES);
 
   const KPI_OPTS = ["awareness", "hybrid", "leads", "sales"];
   const CITY_FOCUS_OPTS = ["all_mp", "metro", "tier2", "pilgrimage"];
@@ -53,6 +38,7 @@ export default function SponsorWisePage() {
     organizer_reputation: 0.55,
     lineup_quality: 0.5,
     is_indoor: 0,
+    is_festive: 0,
     social_media_reach: 15000,
     past_events_organized: 5,
     brand_kpi: "awareness",
@@ -132,6 +118,7 @@ export default function SponsorWisePage() {
         organizer_reputation: clampNum(dealData.organizer_reputation, 0.55),
         lineup_quality: clampNum(dealData.lineup_quality, 0.5),
         is_indoor: clampNum(dealData.is_indoor, 0),
+        is_festive: dealData.is_festive,
         social_media_reach: Math.max(0, parseInt(dealData.social_media_reach || 0, 10)),
         past_events_organized: Math.max(0, parseInt(dealData.past_events_organized || 0, 10)),
         brand_kpi: dealData.brand_kpi,
@@ -308,7 +295,7 @@ export default function SponsorWisePage() {
                 error={dealErr}
                 showAdvanced={showAdvanced}
                 setShowAdvanced={setShowAdvanced}
-                CITIES={CITIES}
+                CITIES={ML_CITIES}
                 EVENT_TYPES={eventTypes}
                 KPI_OPTS={KPI_OPTS}
                 CITY_FOCUS_OPTS={CITY_FOCUS_OPTS}
