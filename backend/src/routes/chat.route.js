@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const {Message} = require('../models/message.model');
 const {Conversation} = require('../models/conversation.model');
 const {Organizer} = require('../models/organizer.model');
+const {SponsorApplication} = require('../models/sponsorApplication.model');
 const {verifyJwt} = require('../middleware/auth.middleware');
 const {isParticipant} = require('../utility/chatAccess');
 
@@ -34,6 +35,12 @@ router.post('/conversation', async (req, res) => {
 
     let convo = await Conversation.findOne({ organizerId, sponsorId, eventId });
     if (!convo) {
+      // Sponsors start chats; organizers can only reach sponsors who applied
+      const canStart = req.user.role === 'sponsor'
+        || await SponsorApplication.exists({ sponsor: sponsorId, event: eventId, status: { $ne: "withdrawn" } });
+      if (!canStart) {
+        return res.status(403).json({ error: "This sponsor has not contacted you yet" });
+      }
       convo = await Conversation.create({ organizerId, sponsorId, eventId });
     }
     res.json(convo);

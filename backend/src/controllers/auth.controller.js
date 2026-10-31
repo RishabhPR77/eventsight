@@ -7,6 +7,7 @@ const {asyncHandler}=require("../utility/AsyncHandler.js");
 const { Otp } = require("../models/otp.model.js");
 const { sendEmail } = require("../utility/sendEmail.js");
 const { cookieOptions } = require("../utility/cookieOptions.js");
+const { hasOpenDeals, removeUserData } = require("../utility/dealRules.js");
 
 const MAX_OTP_ATTEMPTS=5;
 const OTP_RESEND_COOLDOWN_MS=1000*60;
@@ -439,12 +440,17 @@ const resetPassword=asyncHandler(async(req,res)=>{
 const deleteAccount=asyncHandler(async(req,res)=>{
    
 
+    if(await hasOpenDeals(req.user)){
+        throw new ApiError(409,"Finish your accepted sponsorships before deleting your account")
+    }
+
+    await removeUserData(req.user);
+
     const deleteUser=await User.findByIdAndDelete(req.user._id);
     //null=falsy
     if(!deleteUser){
         throw new ApiError(404,"User not found")
     }
-    await Otp.deleteMany({user:req.user._id});
     
     const options=cookieOptions();
     res.status(200)

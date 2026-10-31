@@ -25,12 +25,6 @@ const eventFeedBackSchema=new mongoose.Schema({
         min:0,
         max:1
     },
-    activationMaturity:{
-        type:Number,
-        default:0.5,
-        min:0,
-        max:1
-    },
     isDeleted:{
         type:Boolean,
         default:false,

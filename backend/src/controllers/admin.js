@@ -11,6 +11,8 @@ const { ApiResponse } = require("../utility/ApiResponse");
 const { asyncHandler } = require("../utility/AsyncHandler");
 const { escapeRegex } = require("../utility/escapeRegex");
 const { cookieOptions } = require("../utility/cookieOptions");
+const { Sponsor } = require("../models/sponsers.model");
+const { rejectPendingApplications, removeUserData } = require("../utility/dealRules");
 
 // ─── Admin Auth ───────────────────────────────────────────────────
 
@@ -101,6 +103,10 @@ const getBrandTypes = asyncHandler(async (req, res) => {
 });
 
 const deleteBrandType = asyncHandler(async (req, res) => {
+    if (await Sponsor.exists({ brandType: req.params.id, isDeleted: false })) {
+        throw new ApiError(409, "This brand type is used by a sponsor profile");
+    }
+
     const bt = await BrandType.findByIdAndDelete(req.params.id);
     if (!bt) throw new ApiError(404, "Brand type not found");
     return res.status(200).json(new ApiResponse(200, null, "Brand type deleted"));
@@ -159,8 +165,11 @@ const getAllUsers = asyncHandler(async (req, res) => {
 
 const deleteUser = asyncHandler(async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) throw new ApiError(400, "Invalid user id");
-    const user = await User.findByIdAndDelete(req.params.id);
+    const user = await User.findById(req.params.id);
     if (!user) throw new ApiError(404, "User not found");
+
+    await removeUserData(user);
+    await user.deleteOne();
     return res.status(200).json(new ApiResponse(200, null, "User deleted permanently"));
 });
 
@@ -224,6 +233,7 @@ const deleteEventAdmin = asyncHandler(async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) throw new ApiError(400, "Invalid event id");
     const event = await Organizer.findByIdAndUpdate(req.params.id, { isDeleted: true }, { new: true });
     if (!event) throw new ApiError(404, "Event not found");
+    await rejectPendingApplications([event._id]);
     return res.status(200).json(new ApiResponse(200, null, "Event deleted"));
 });
 

@@ -230,6 +230,21 @@ export async function getEventPrediction(eventId) {
   return data;
 }
 
+export async function withdrawApplication(eventId) {
+  const { data } = await backend.post(`sponsor/events/${eventId}/application/withdraw`);
+  return data;
+}
+
+export async function confirmSponsorship(eventId) {
+  const { data } = await backend.post(`sponsor/events/${eventId}/application/confirm`);
+  return data;
+}
+
+export async function confirmSponsorshipAsOrganizer(eventId, applicationId, activationMaturity) {
+  const { data } = await backend.post(`organizer/events/${eventId}/applications/${applicationId}/confirm`, { activationMaturity });
+  return data;
+}
+
 // Sponsor — completed events (for feedback board)
 export async function getSponsorCompletedEvents(params = {}) {
   const { data } = await backend.get("sponsor/completed-events", { params });

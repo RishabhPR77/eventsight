@@ -6,6 +6,7 @@ const { ApiError } = require("../utility/ApiError")
 const { ApiResponse } = require("../utility/ApiResponse")
 const { asyncHandler } = require("../utility/AsyncHandler")
 const { eventCutoff } = require("../utility/eventDates")
+const { isEventFinished } = require("../utility/dealRules")
 
 const MAX_MESSAGE_LENGTH = 1000
 
@@ -18,13 +19,22 @@ const requireOwnEvent = async (eventId, organizerId) => {
         _id: eventId,
         organizer: organizerId,
         isDeleted: false
-    }).select("_id")
+    }).select("_id date")
 
     if (!event) {
         throw new ApiError(404, "Event not found")
     }
 
     return event
+}
+
+const assertConfirmable = (application, event) => {
+    if (application.status !== "accepted") {
+        throw new ApiError(400, "Only accepted sponsorships can be confirmed")
+    }
+    if (!isEventFinished(event)) {
+        throw new ApiError(400, "Sponsorships can be confirmed after the event is over")
+    }
 }
 
 const applyToEvent = asyncHandler(async (req, res) => {
@@ -158,6 +168,10 @@ const updateApplicationStatus = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Status must be accepted or rejected")
     }
 
+    if (isEventFinished(event)) {
+        throw new ApiError(400, "This event is over, so applications can no longer be decided")
+    }
+
     const application = await SponsorApplication.findOne({
         _id: req.params.applicationId,
         event: event._id,
@@ -189,10 +203,97 @@ const updateApplicationStatus = asyncHandler(async (req, res) => {
     )
 })
 
+const withdrawApplication = asyncHandler(async (req, res) => {
+
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+        throw new ApiError(400, "Invalid event id")
+    }
+
+    const application = await SponsorApplication.findOneAndUpdate(
+        { sponsor: req.user._id, event: req.params.id, status: "pending", isDeleted: false },
+        { $set: { status: "withdrawn" } },
+        { new: true }
+    )
+
+    if (!application) {
+        throw new ApiError(409, "Only a pending application can be withdrawn")
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, application, "Application withdrawn")
+    )
+})
+
+const confirmAsSponsor = asyncHandler(async (req, res) => {
+
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+        throw new ApiError(400, "Invalid event id")
+    }
+
+    const application = await SponsorApplication.findOne({
+        sponsor: req.user._id,
+        event: req.params.id,
+        isDeleted: false
+    }).populate("event", "date")
+
+    if (!application) {
+        throw new ApiError(404, "Application not found")
+    }
+
+    assertConfirmable(application, application.event)
+
+    if (application.sponsorConfirmedAt) {
+        throw new ApiError(409, "You have already confirmed this sponsorship")
+    }
+
+    application.sponsorConfirmedAt = new Date()
+    await application.save()
+
+    return res.status(200).json(
+        new ApiResponse(200, application, "Sponsorship confirmed")
+    )
+})
+
+const confirmAsOrganizer = asyncHandler(async (req, res) => {
+
+    const event = await requireOwnEvent(req.params.eventId, req.user._id)
+
+    if (!mongoose.Types.ObjectId.isValid(req.params.applicationId)) {
+        throw new ApiError(400, "Invalid application id")
+    }
+
+    const application = await SponsorApplication.findOne({
+        _id: req.params.applicationId,
+        event: event._id,
+        isDeleted: false
+    })
+
+    if (!application) {
+        throw new ApiError(404, "Application not found")
+    }
+
+    assertConfirmable(application, event)
+
+    if (application.organizerConfirmedAt) {
+        throw new ApiError(409, "You have already confirmed this sponsorship")
+    }
+
+    application.organizerConfirmedAt = new Date()
+    application.activationRating = req.body.activationMaturity
+    await application.save()
+
+    return res.status(200).json(
+        new ApiResponse(200, application, "Sponsorship confirmed")
+    )
+})
+
 module.exports = {
     applyToEvent,
     getMyApplications,
     getMyEventApplication,
     getEventApplications,
-    updateApplicationStatus
+    updateApplicationStatus,
+    withdrawApplication,
+    confirmAsSponsor,
+    confirmAsOrganizer
 }

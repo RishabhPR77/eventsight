@@ -12,6 +12,8 @@ const {EventFeedBack}=require("../models/eventFeedBack.model")
 const { postToMl } = require("../utility/mlClient")
 const { escapeRegex } = require("../utility/escapeRegex")
 const { eventCutoff } = require("../utility/eventDates")
+const { SponsorApplication } = require("../models/sponsorApplication.model")
+const { findConfirmedDeal, hasOpenDeals, isEventFinished } = require("../utility/dealRules")
 
 const DEFAULT_FEEDBACK_RATINGS = Object.freeze({
     organizerReputation: 0.5,
@@ -43,18 +45,6 @@ const buildFeedbackAggregateFields = () => ({
                 ]
             },
             DEFAULT_FEEDBACK_RATINGS.lineupQuality
-        ]
-    },
-    avgActivationMaturity: {
-        $cond: [
-            { $gt: [{ $size: "$feedbacks" }, 0] },
-            {
-                $divide: [
-                    { $add: [{ $sum: "$feedbacks.activationMaturity" }, DEFAULT_FEEDBACK_RATINGS.activationMaturity] },
-                    { $add: [{ $size: "$feedbacks" }, 1] }
-                ]
-            },
-            DEFAULT_FEEDBACK_RATINGS.activationMaturity
         ]
     }
 })
@@ -197,6 +187,10 @@ const updateSponsorProfile = asyncHandler(async (req, res) => {
 
 const deleteSponsorProfile = asyncHandler(async (req, res) => {
 
+    if (await hasOpenDeals(req.user)) {
+        throw new ApiError(409, "Finish your accepted sponsorships before deleting your profile")
+    }
+
     const profile = await Sponsor.findOneAndUpdate(
         { sponsor: req.user._id, isDeleted: false },
         { isDeleted: true },
@@ -333,9 +327,7 @@ const getEventById = asyncHandler(async (req, res) => {
         {
             $match: {
                 _id: new mongoose.Types.ObjectId(req.params.id),
-                isDeleted: false,
-                isExpired: false,
-                status: "upcoming"
+                isDeleted: false
             }
         },
 
@@ -403,7 +395,7 @@ const getEventById = asyncHandler(async (req, res) => {
 
                 "organizerInfo.password": "$$REMOVE",
                 "organizerInfo.refreshToken": "$$REMOVE",
-                status: "upcoming"
+                status: { $cond: [{ $lt: ["$date", eventCutoff()] }, "completed", "upcoming"] }
             }
         },
 
@@ -427,19 +419,21 @@ const giveFeedback = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Invalid event id")
     }
 
-    
     const event = await Organizer.findOne({
         _id: req.params.id,
-        isDeleted: false,
-        isExpired:true,
-        date: { $lt: eventCutoff() }
+        isDeleted: false
     })
 
-    if (!event) {
+    if (!event || !isEventFinished(event)) {
         throw new ApiError(404, "Event not found or not completed yet")
     }
 
-    
+    const deal = await findConfirmedDeal(req.user._id, event._id)
+
+    if (!deal) {
+        throw new ApiError(403, "Feedback opens once you and the organizer both confirm this sponsorship")
+    }
+
     const existing = await EventFeedBack.findOne({
         event: req.params.id,
         sponsor: req.user._id
@@ -449,14 +443,13 @@ const giveFeedback = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Feedback already submitted for this event")
     }
 
-    const { organizerReputation, lineupQuality, activationMaturity } = req.body
+    const { organizerReputation, lineupQuality } = req.body
 
     const feedback = await EventFeedBack.create({
         event: req.params.id,
         sponsor: req.user._id,
-        ...(organizerReputation !== undefined && { organizerReputation }),
-        ...(lineupQuality !== undefined && { lineupQuality }),
-        ...(activationMaturity !== undefined && { activationMaturity })
+        organizerReputation,
+        lineupQuality
     })
 
     return res.status(201).json(
@@ -491,29 +484,11 @@ const updateFeedback = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Invalid event id")
     }
 
-    const data = req.body
-
-    if (!data || Object.keys(data).length === 0) {
-        throw new ApiError(400, "No data provided for update")
-    }
-
-    const allowedFields = ["organizerReputation", "lineupQuality", "activationMaturity"]
-
-    const updateData = {}
-
-    for (const key of allowedFields) {
-        if (data[key] !== undefined) {
-            updateData[key] = data[key]
-        }
-    }
-
-    if (Object.keys(updateData).length === 0) {
-        throw new ApiError(400, "No valid fields to update")
-    }
+    const { organizerReputation, lineupQuality } = req.body
 
     const feedback = await EventFeedBack.findOneAndUpdate(
         { event: req.params.id, sponsor: req.user._id },
-        { $set: updateData },
+        { $set: { organizerReputation, lineupQuality } },
         { new: true, runValidators: true }
     )
 
@@ -542,6 +517,10 @@ const getPrediction = asyncHandler(async (req, res) => {
 
     if (!sponsorProfile) {
         throw new ApiError(404, "Sponsor profile not found")
+    }
+
+    if (!sponsorProfile.brandType) {
+        throw new ApiError(400, "Choose a brand type in your profile first")
     }
 
     
@@ -627,14 +606,14 @@ const getPrediction = asyncHandler(async (req, res) => {
 
     let avgOrganizerReputation = DEFAULT_FEEDBACK_RATINGS.organizerReputation
     let avgLineupQuality       = DEFAULT_FEEDBACK_RATINGS.lineupQuality
-    let avgActivationMaturity  = DEFAULT_FEEDBACK_RATINGS.activationMaturity
 
     if (eventData.pastEventIds && eventData.pastEventIds.length > 0) {
         
         const feedbackStats = await EventFeedBack.aggregate([
             {
                 $match: {
-                    event: { $in: eventData.pastEventIds }
+                    event: { $in: eventData.pastEventIds },
+                    isDeleted: false
                 }
             },
             {
@@ -642,8 +621,7 @@ const getPrediction = asyncHandler(async (req, res) => {
                     _id: null,
                     feedbackCount: { $sum: 1 },
                     sumOrganizerReputation: { $sum: "$organizerReputation" },
-                    sumLineupQuality: { $sum: "$lineupQuality" },
-                    sumActivationMaturity: { $sum: "$activationMaturity" }
+                    sumLineupQuality: { $sum: "$lineupQuality" }
                 }
             }
         ])
@@ -654,13 +632,22 @@ const getPrediction = asyncHandler(async (req, res) => {
 
             avgOrganizerReputation = ((stats.sumOrganizerReputation || 0) + DEFAULT_FEEDBACK_RATINGS.organizerReputation) / divisor
             avgLineupQuality       = ((stats.sumLineupQuality || 0) + DEFAULT_FEEDBACK_RATINGS.lineupQuality) / divisor
-            avgActivationMaturity  = ((stats.sumActivationMaturity || 0) + DEFAULT_FEEDBACK_RATINGS.activationMaturity) / divisor
         }
         
     }
     
 
   
+    // Activation maturity describes the brand, so it comes from what organizers
+    // rated this sponsor, not from the organizer of the event being predicted
+    const activationStats = await SponsorApplication.aggregate([
+        { $match: { sponsor: req.user._id, activationRating: { $ne: null } } },
+        { $group: { _id: null, count: { $sum: 1 }, total: { $sum: "$activationRating" } } }
+    ])
+    const avgActivationMaturity = activationStats.length
+        ? (activationStats[0].total + DEFAULT_FEEDBACK_RATINGS.activationMaturity) / (activationStats[0].count + 1)
+        : DEFAULT_FEEDBACK_RATINGS.activationMaturity
+
     let analyzeBrandResponse
     try {
         analyzeBrandResponse = await postToMl("/analyze-brand", {
@@ -757,6 +744,19 @@ const getCompletedEvents = asyncHandler(async (req, res) => {
         },
 
         {
+            $lookup: {
+                from: "sponsorapplications",
+                let: { eventId: "$_id" },
+                pipeline: [
+                    { $match: { sponsor: req.user._id, $expr: { $eq: ["$event", "$$eventId"] } } },
+                    { $project: { status: 1, sponsorConfirmedAt: 1, organizerConfirmedAt: 1 } }
+                ],
+                as: "myApplication"
+            }
+        },
+        { $unwind: { path: "$myApplication", preserveNullAndEmptyArrays: true } },
+
+        {
             $addFields: {
                 ...buildFeedbackAggregateFields(),
                 myFeedback: {
@@ -774,7 +774,14 @@ const getCompletedEvents = asyncHandler(async (req, res) => {
 
         {
             $addFields: {
-                hasFeedback: { $gt: [{ $size: "$myFeedback" }, 0] }
+                hasFeedback: { $gt: [{ $size: "$myFeedback" }, 0] },
+                canGiveFeedback: {
+                    $and: [
+                        { $eq: ["$myApplication.status", "accepted"] },
+                        { $gt: ["$myApplication.sponsorConfirmedAt", null] },
+                        { $gt: ["$myApplication.organizerConfirmedAt", null] }
+                    ]
+                }
             }
         },
 

@@ -11,6 +11,8 @@ import {
   updateEventFeedback,
   applyToEvent,
   getMyEventApplication,
+  withdrawApplication,
+  confirmSponsorship,
 } from "@/lib/api";
 import { APPLICATION_STATUS_CLASS, fmtINR, getErrorMessage, coldEmailToText, resolveMediaUrl } from "@/lib/utils";
 import ResultsPanel from "@/components/results/ResultsPanel";
@@ -39,7 +41,6 @@ function FeedbackForm({ initial, onSubmit, submitting, submitLabel }) {
   const values = initial || {
     organizerReputation: 0.5,
     lineupQuality: 0.5,
-    activationMaturity: 0.5,
   };
 
   return (
@@ -47,7 +48,6 @@ function FeedbackForm({ initial, onSubmit, submitting, submitLabel }) {
       {[
         ["organizerReputation", "Organizer reputation"],
         ["lineupQuality", "Lineup quality"],
-        ["activationMaturity", "Activation maturity"],
       ].map(([key, label]) => (
         <div key={key}>
           <div className="field-label">{label}</div>
@@ -125,12 +125,11 @@ export default function SponsorEventPage() {
   const computeOrganizerMetrics = (completedEvts) => {
     const withFeedback = completedEvts.filter((e) => (e.totalFeedbacks || 0) > 0);
     if (withFeedback.length === 0) return null;
-    let sumRep = 0, sumLineup = 0, sumActivation = 0, totalCount = 0;
+    let sumRep = 0, sumLineup = 0, totalCount = 0;
     withFeedback.forEach((e) => {
       const n = e.totalFeedbacks || 0;
       sumRep        += (e.avgOrganizerReputation || DEFAULT_RATINGS.organizerReputation) * (n + 1) - DEFAULT_RATINGS.organizerReputation;
       sumLineup     += (e.avgLineupQuality || DEFAULT_RATINGS.lineupQuality) * (n + 1) - DEFAULT_RATINGS.lineupQuality;
-      sumActivation += (e.avgActivationMaturity || DEFAULT_RATINGS.activationMaturity) * (n + 1) - DEFAULT_RATINGS.activationMaturity;
       totalCount    += n;
     });
     const divisor = totalCount + 1;
@@ -138,7 +137,6 @@ export default function SponsorEventPage() {
     return {
       avgOrganizerReputation: r((sumRep + DEFAULT_RATINGS.organizerReputation) / divisor),
       avgLineupQuality:       r((sumLineup + DEFAULT_RATINGS.lineupQuality) / divisor),
-      avgActivationMaturity:  r((sumActivation + DEFAULT_RATINGS.activationMaturity) / divisor),
       totalFeedbacks:         totalCount,
     };
   };
@@ -223,7 +221,6 @@ export default function SponsorEventPage() {
     const payload = {
       organizerReputation: Number(form.get("organizerReputation") || 0.5),
       lineupQuality: Number(form.get("lineupQuality") || 0.5),
-      activationMaturity: Number(form.get("activationMaturity") || 0.5),
     };
     try {
       if (isUpdate) await updateEventFeedback(id, payload);
@@ -235,6 +232,28 @@ export default function SponsorEventPage() {
       toast.error(getErrorMessage(err));
     }
     setSubmittingFeedback(false);
+  };
+
+  const handleWithdraw = async () => {
+    if (!window.confirm("Withdraw this application? You can't apply to this event again.")) return;
+    try {
+      const res = await withdrawApplication(id);
+      setApplication(res?.data || null);
+      toast.success("Application withdrawn");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!window.confirm("Confirm that this sponsorship really happened?")) return;
+    try {
+      const res = await confirmSponsorship(id);
+      setApplication(res?.data || null);
+      toast.success("Sponsorship confirmed");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
   };
 
   const handleApply = async (e) => {
@@ -265,7 +284,9 @@ export default function SponsorEventPage() {
 
   if (!eventDetail) return null;
 
-  const canApply = eventDetail.status === "upcoming" && new Date(eventDetail.date) >= new Date();
+  const canApply = eventDetail.status === "upcoming";
+  const canConfirm = application?.status === "accepted" && eventDetail.status === "completed" && !application.sponsorConfirmedAt;
+  const feedbackOpen = Boolean(application?.sponsorConfirmedAt && application?.organizerConfirmedAt);
 
   return (
     <div className="space-y-6">
@@ -328,6 +349,12 @@ export default function SponsorEventPage() {
             ) : canApply ? (
               <button className="btn-primary" onClick={() => setShowApplyForm(true)}>Apply for sponsorship</button>
             ) : null}
+            {application?.status === "pending" ? (
+              <button className="btn-secondary" onClick={handleWithdraw}>Withdraw</button>
+            ) : null}
+            {canConfirm ? (
+              <button className="btn-primary" onClick={handleConfirm}>Confirm sponsorship happened</button>
+            ) : null}
             <button className="btn-secondary" onClick={() => setShowChat(true)}>Chat with organizer</button>
           </div>
         </div>
@@ -359,7 +386,6 @@ export default function SponsorEventPage() {
                 {[
                   ["Organizer reputation", organizerQualityMetrics?.avgOrganizerReputation || eventDetail.avgOrganizerReputation || 0.5],
                   ["Lineup quality", organizerQualityMetrics?.avgLineupQuality || eventDetail.avgLineupQuality || 0.5],
-                  ["Activation maturity", organizerQualityMetrics?.avgActivationMaturity || eventDetail.avgActivationMaturity || 0.5],
                 ].map(([label, val]) => (
                   <div key={label}>
                     <div className="flex justify-between text-xs font-bold mb-2">
@@ -398,13 +424,21 @@ export default function SponsorEventPage() {
         {tab === "feedback" && (
           <div className="max-w-2xl animate-fade-up">
             <h4 className="text-2xl font-black mb-2">Post-event feedback</h4>
-            <p className="muted mb-8 leading-7">Help the community by rating the organizer’s actual performance. This data improves future predictions.</p>
-            <FeedbackForm
-              initial={myFeedback}
-              onSubmit={(e) => handleSubmitFeedback(e, !!myFeedback)}
-              submitting={submittingFeedback}
-              submitLabel={myFeedback ? "Update feedback" : "Submit feedback"}
-            />
+            {feedbackOpen ? (
+              <>
+                <p className="muted mb-8 leading-7">Help the community by rating the organizer’s actual performance. This data improves future predictions.</p>
+                <FeedbackForm
+                  initial={myFeedback}
+                  onSubmit={(e) => handleSubmitFeedback(e, !!myFeedback)}
+                  submitting={submittingFeedback}
+                  submitLabel={myFeedback ? "Update feedback" : "Submit feedback"}
+                />
+              </>
+            ) : (
+              <p className="muted leading-7">
+                Feedback opens after the event, once your sponsorship was accepted and both you and the organizer confirm it happened.
+              </p>
+            )}
           </div>
         )}
       </section>

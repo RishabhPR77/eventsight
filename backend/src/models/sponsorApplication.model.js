@@ -39,6 +39,19 @@ const sponsorApplicationSchema=new mongoose.Schema({
         type:Number,
         min:0
     },
+    // Set after the event by each side, to say the sponsorship really happened
+    sponsorConfirmedAt:{
+        type:Date
+    },
+    organizerConfirmedAt:{
+        type:Date
+    },
+    // The organizer's rating of how well this brand ran its activation
+    activationRating:{
+        type:Number,
+        min:0,
+        max:1
+    },
     status:{
         type:String,
         enum:["pending","negotiating","accepted","rejected","withdrawn"],

@@ -7,6 +7,9 @@ const { uploadOnCloudinary } = require("../utility/cloudinary.js");
 const { EventCategory } = require("../models/eventCategory.model.js");
 const { escapeRegex } = require("../utility/escapeRegex.js");
 const { eventCutoff } = require("../utility/eventDates.js");
+const { City } = require("../models/city.model.js");
+const { SponsorApplication } = require("../models/sponsorApplication.model.js");
+const { isEventFinished, rejectPendingApplications } = require("../utility/dealRules.js");
 
 
 const DEFAULT_FEEDBACK_RATINGS = Object.freeze({
@@ -40,22 +43,17 @@ const buildFeedbackAggregateFields = () => ({
             },
             DEFAULT_FEEDBACK_RATINGS.lineupQuality
         ]
-    },
-    avgActivationMaturity: {
-        $cond: [
-            { $gt: [{ $size: "$feedbacks" }, 0] },
-            {
-                $divide: [
-                    { $add: [{ $sum: "$feedbacks.activationMaturity" }, DEFAULT_FEEDBACK_RATINGS.activationMaturity] },
-                    { $add: [{ $size: "$feedbacks" }, 1] }
-                ]
-            },
-            DEFAULT_FEEDBACK_RATINGS.activationMaturity
-        ]
     }
 })
 
 
+
+// Predictions only work for cities the model knows, which is what the admin list holds
+const assertKnownCity = async (location) => {
+    if (!(await City.exists({ name: location, isDeleted: false }))) {
+        throw new ApiError(400, "Select a city from the list")
+    }
+};
 
 const parseSocialMedia = (raw) => {
     if (!raw) return [];
@@ -99,6 +97,8 @@ const eventCreate = asyncHandler(async (req, res) => {
     ) {
         throw new ApiError(400, "All fields are required")
     }
+
+    await assertKnownCity(location);
 
     const existingEventCategory = await EventCategory.findById(eventCategory);
 
@@ -358,6 +358,20 @@ const updateEvent = asyncHandler(async (req, res) => {
         throw new ApiError(400, "No data provided for update")
     }
 
+    const currentEvent = await Organizer.findOne({
+        _id: req.params.eventId,
+        organizer: req.user._id,
+        isDeleted: false
+    })
+
+    if (!currentEvent) {
+        throw new ApiError(404, "Event not found")
+    }
+
+    if (isEventFinished(currentEvent)) {
+        throw new ApiError(400, "A finished event can't be edited")
+    }
+
     const allowedFields = [
         "eventName",
         "eventCategory",
@@ -401,6 +415,18 @@ const updateEvent = asyncHandler(async (req, res) => {
 
     if (updateData.location) {
         updateData.location = updateData.location.trim()
+        await assertKnownCity(updateData.location)
+    }
+
+    // Sponsors agreed to a place and date, so an accepted deal locks them
+    const dateChanged = updateData.date !== undefined
+        && new Date(updateData.date).getTime() !== currentEvent.date.getTime()
+    const locationChanged = updateData.location !== undefined
+        && updateData.location !== currentEvent.location
+
+    if ((dateChanged || locationChanged)
+        && await SponsorApplication.exists({ event: currentEvent._id, status: "accepted" })) {
+        throw new ApiError(409, "Date and city can't change after a sponsor is accepted")
     }
 
 
@@ -478,6 +504,10 @@ const deleteEvent = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Invalid event id")
     }
 
+    if (await SponsorApplication.exists({ event: req.params.eventId, status: "accepted" })) {
+        throw new ApiError(409, "An event with an accepted sponsor can't be deleted")
+    }
+
     const event = await Organizer.findOneAndUpdate(
 
         {
@@ -495,6 +525,8 @@ const deleteEvent = asyncHandler(async (req, res) => {
     if (!event) {
         throw new ApiError(404, "Event not found")
     }
+
+    await rejectPendingApplications([event._id])
 
     return res.status(200).json(
         new ApiResponse(

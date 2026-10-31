@@ -222,7 +222,8 @@ A Node.js + Express REST API that manages all application data, user authenticat
 - Create and manage events with image uploads to Cloudinary
 - Review sponsor applications per event and accept or reject each one
 - View ML-powered analysis results for their events
-- Receive post-event feedback that feeds back into reputation scores
+- Receive post-event feedback that feeds back into reputation scores; feedback opens only after the sponsorship is accepted, the event ends, and both sides confirm it happened
+- Rate a sponsor's activation when confirming, which feeds that brand's future predictions
 
 **Sponsor Domain**
 - Browse events and apply for sponsorship (one application per upcoming event, with an offered amount and an optional message)

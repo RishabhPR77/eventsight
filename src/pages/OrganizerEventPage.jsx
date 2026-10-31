@@ -9,6 +9,7 @@ import {
   backend,
   fetchEventCategories,
   fetchCities,
+  confirmSponsorshipAsOrganizer,
   getEventApplications,
   updateApplicationStatus,
 } from "@/lib/api";
@@ -169,6 +170,7 @@ export default function OrganizerEventPage() {
   const [unreadCounts, setUnreadCounts] = useState({});
   const [applications, setApplications] = useState([]);
   const [decidingId, setDecidingId] = useState(null);
+  const [activationRatings, setActivationRatings] = useState({});
 
   const DEFAULT_RATINGS = { organizerReputation: 0.5, lineupQuality: 0.55, activationMaturity: 0.5 };
 
@@ -213,6 +215,19 @@ export default function OrganizerEventPage() {
     } catch (err) {
       toast.error(getErrorMessage(err));
     }
+  };
+
+  const handleConfirmDeal = async (application) => {
+    setDecidingId(application._id);
+    try {
+      const res = await confirmSponsorshipAsOrganizer(id, application._id, activationRatings[application._id] ?? 0.5);
+      const { organizerConfirmedAt } = res.data;
+      setApplications((prev) => prev.map((item) => item._id === application._id ? { ...item, organizerConfirmedAt } : item));
+      toast.success("Sponsorship confirmed");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+    setDecidingId(null);
   };
 
   const handleDecision = async (application, status) => {
@@ -264,7 +279,6 @@ export default function OrganizerEventPage() {
     return {
       avgOrganizerReputation: r(detail.avgOrganizerReputation || DEFAULT_RATINGS.organizerReputation),
       avgLineupQuality: r(detail.avgLineupQuality || DEFAULT_RATINGS.lineupQuality),
-      avgActivationMaturity: r(detail.avgActivationMaturity || DEFAULT_RATINGS.activationMaturity),
       totalFeedbacks: detail.totalFeedbacks || 0,
     };
   }, [detail]);
@@ -302,7 +316,9 @@ export default function OrganizerEventPage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-             <button className="btn-primary" onClick={() => setModalMode("edit")}>Edit event</button>
+             {detail.status === "upcoming" ? (
+               <button className="btn-primary" onClick={() => setModalMode("edit")}>Edit event</button>
+             ) : null}
              <button className="btn-danger" style={{ background: "rgba(239, 68, 68, 0.08)", color: "#dc2626" }} onClick={handleDelete}>Delete event</button>
           </div>
         </div>
@@ -321,7 +337,6 @@ export default function OrganizerEventPage() {
                 {[
                   ["Organizer reputation", qualityMetrics.avgOrganizerReputation],
                   ["Lineup quality", qualityMetrics.avgLineupQuality],
-                  ["Activation maturity", qualityMetrics.avgActivationMaturity],
                 ].map(([label, val]) => (
                   <div key={label}>
                     <div className="flex justify-between text-xs font-bold mb-2">
@@ -379,8 +394,23 @@ export default function OrganizerEventPage() {
                           <button className="btn-primary !py-2 !px-4 !text-xs" disabled={decidingId === application._id} onClick={() => handleDecision(application, "accepted")}>Accept</button>
                           <button className="btn-danger !py-2 !px-4 !text-xs" disabled={decidingId === application._id} onClick={() => handleDecision(application, "rejected")}>Reject</button>
                         </div>
+                      ) : application.status === "accepted" && detail.status === "completed" && !application.organizerConfirmedAt ? (
+                        <div className="flex flex-wrap items-center gap-3">
+                          <label className="text-xs font-bold muted">
+                            Brand activation: {(activationRatings[application._id] ?? 0.5).toFixed(2)}
+                            <input
+                              type="range" min="0" max="1" step="0.01"
+                              value={activationRatings[application._id] ?? 0.5}
+                              onChange={(e) => setActivationRatings((prev) => ({ ...prev, [application._id]: Number(e.target.value) }))}
+                              className="block w-36 accent-[var(--accent)]"
+                            />
+                          </label>
+                          <button className="btn-primary !py-2 !px-4 !text-xs" disabled={decidingId === application._id} onClick={() => handleConfirmDeal(application)}>Confirm sponsorship happened</button>
+                        </div>
                       ) : (
-                        <span className={APPLICATION_STATUS_CLASS[application.status] || APPLICATION_STATUS_CLASS.pending}>{application.status}</span>
+                        <span className={APPLICATION_STATUS_CLASS[application.status] || APPLICATION_STATUS_CLASS.pending}>
+                          {application.status}{application.organizerConfirmedAt ? (application.sponsorConfirmedAt ? " · confirmed by both" : " · waiting for sponsor") : ""}
+                        </span>
                       )}
                     </div>
                   );

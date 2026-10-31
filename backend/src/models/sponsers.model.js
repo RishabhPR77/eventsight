@@ -9,7 +9,6 @@ const sponsorSchema=new mongoose.Schema({
     brandName:{
         type:String,
         required:true,
-        lowercase:true,
         trim:true
     },
     brandType:{

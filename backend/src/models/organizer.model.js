@@ -31,7 +31,7 @@ const organizerSchema=new mongoose.Schema({
     capacity:{
         type:Number,
         required:true,
-        min:0
+        min:1
     },
     date:{
         type:Date,
@@ -47,7 +47,7 @@ const organizerSchema=new mongoose.Schema({
     ask:{ //sponsor amount
         type:Number,
         required:true,
-        min:0
+        min:1
     },
     thumbnail:{
         type:String
