@@ -9,8 +9,10 @@ import {
   backend,
   fetchEventCategories,
   fetchCities,
+  getEventApplications,
+  updateApplicationStatus,
 } from "@/lib/api";
-import { fmtINR, getErrorMessage, resolveMediaUrl } from "@/lib/utils";
+import { APPLICATION_STATUS_CLASS, fmtINR, getErrorMessage, resolveMediaUrl } from "@/lib/utils";
 import ChatBox from "@/components/ChatBox";
 import { useAuth } from "@/context/AuthContext";
 
@@ -165,6 +167,8 @@ export default function OrganizerEventPage() {
   const [activeChatSponsor, setActiveChatSponsor] = useState(null);
   const [eventConversations, setEventConversations] = useState([]);
   const [unreadCounts, setUnreadCounts] = useState({});
+  const [applications, setApplications] = useState([]);
+  const [decidingId, setDecidingId] = useState(null);
 
   const DEFAULT_RATINGS = { organizerReputation: 0.5, lineupQuality: 0.55, activationMaturity: 0.5 };
 
@@ -175,15 +179,20 @@ export default function OrganizerEventPage() {
       const payload = detailRes?.data || detailRes;
       setDetail(payload);
 
-      const [catRes, cityRes, convRes] = await Promise.all([
+      const [catRes, cityRes, convRes, appRes] = await Promise.all([
         fetchEventCategories(),
         fetchCities(),
-        backend.get(`/chat/event/${id}`).catch(() => ({ data: [] }))
+        backend.get(`/chat/event/${id}`).catch(() => ({ data: [] })),
+        getEventApplications(id).catch((err) => {
+          toast.error(getErrorMessage(err));
+          return null;
+        })
       ]);
       setDetail(payload);
       setCategories(catRes);
       setCities(cityRes);
       setEventConversations(convRes?.data || []);
+      setApplications(appRes?.data || []);
     } catch (err) {
       toast.error(getErrorMessage(err));
       navigate(-1);
@@ -204,6 +213,21 @@ export default function OrganizerEventPage() {
     } catch (err) {
       toast.error(getErrorMessage(err));
     }
+  };
+
+  const handleDecision = async (application, status) => {
+    const verb = status === "accepted" ? "Accept" : "Reject";
+    if (!window.confirm(`${verb} this application? This cannot be changed later.`)) return;
+    setDecidingId(application._id);
+    try {
+      const res = await updateApplicationStatus(id, application._id, status);
+      const { status: nextStatus, finalAmount } = res.data;
+      setApplications((prev) => prev.map((item) => item._id === application._id ? { ...item, status: nextStatus, finalAmount } : item));
+      toast.success(`Application ${status}`);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+    setDecidingId(null);
   };
 
   const submitForm = async (e) => {
@@ -330,6 +354,40 @@ export default function OrganizerEventPage() {
             </div>
           </div>
         ) : null}
+
+        <div className="surface-card">
+           <div className="field-label mb-4">Sponsorship applications</div>
+           {applications.length === 0 ? (
+             <p className="muted py-10 text-center">No sponsors have applied to this event yet.</p>
+           ) : (
+             <div className="space-y-3">
+                {applications.map(application => {
+                  const offer = application.negotiations?.[application.negotiations.length - 1];
+                  return (
+                    <div key={application._id} className="soft-card !py-4 !px-5 flex flex-wrap items-center gap-4">
+                      <img src={resolveMediaUrl(application.brand?.logo) || "https://placehold.co/96x96?text=Brand"} alt="" className="w-12 h-12 rounded-2xl object-cover flex-shrink-0" />
+                      <div className="flex-1 min-w-[220px]">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-lg font-black capitalize">{application.brand?.brandName || application.sponsor?.username || "Sponsor"}</span>
+                          {application.brand?.brandType?.name ? <span className="info-chip !py-1">{application.brand.brandType.name}</span> : null}
+                        </div>
+                        <div className="text-[var(--accent)] font-black mt-1">₹{fmtINR(offer?.amount)} offered</div>
+                        {offer?.message ? <p className="muted text-sm mt-1 leading-6 break-words">{offer.message}</p> : null}
+                      </div>
+                      {application.status === "pending" ? (
+                        <div className="flex gap-2">
+                          <button className="btn-primary !py-2 !px-4 !text-xs" disabled={decidingId === application._id} onClick={() => handleDecision(application, "accepted")}>Accept</button>
+                          <button className="btn-danger !py-2 !px-4 !text-xs" disabled={decidingId === application._id} onClick={() => handleDecision(application, "rejected")}>Reject</button>
+                        </div>
+                      ) : (
+                        <span className={APPLICATION_STATUS_CLASS[application.status] || APPLICATION_STATUS_CLASS.pending}>{application.status}</span>
+                      )}
+                    </div>
+                  );
+                })}
+             </div>
+           )}
+        </div>
 
         <div className="surface-card">
            <div className="field-label mb-4">Sponsor inquiries</div>

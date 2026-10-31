@@ -4,12 +4,13 @@ import {
   createSponsorProfile,
   deleteSponsorProfile,
   fetchBrandTypes,
+  getMyApplications,
   getSponsorEvents,
   getSponsorProfile,
   getSponsorCompletedEvents,
   updateSponsorProfile,
 } from "@/lib/api";
-import { fmtINR, getErrorMessage, resolveMediaUrl } from "@/lib/utils";
+import { APPLICATION_STATUS_CLASS, fmtINR, getErrorMessage, resolveMediaUrl } from "@/lib/utils";
 import { io } from "socket.io-client";
 import { useNavigate } from "react-router-dom";
 
@@ -136,6 +137,26 @@ function EventCard({ event, onClick }) {
   );
 }
 
+function ApplicationRow({ application, onOpen }) {
+  const { event, status, finalAmount, negotiations } = application;
+  const removed = !event || event.isDeleted;
+  const amount = status === "accepted" ? finalAmount : negotiations?.[negotiations.length - 1]?.amount;
+
+  return (
+    <div className="soft-card !py-4 !px-5 flex flex-wrap items-center gap-4">
+      <div className="flex-1 min-w-[220px]">
+        <div className="text-lg font-black">{removed ? "Event no longer available" : event.eventName}</div>
+        <div className="muted text-sm mt-1">
+          {removed ? null : `${event.location} · ${new Date(event.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} · `}
+          ₹{fmtINR(amount)} {status === "accepted" ? "agreed" : "offered"}
+        </div>
+      </div>
+      <span className={APPLICATION_STATUS_CLASS[status] || APPLICATION_STATUS_CLASS.pending}>{status}</span>
+      {removed ? null : <button className="btn-secondary !py-2 !px-4 !text-xs" onClick={onOpen}>View event</button>}
+    </div>
+  );
+}
+
 function BrandForm({ initial, brandTypes, onClose, onSubmit, submitting }) {
   const defaults = initial || {};
   const [preview, setPreview] = useState(defaults.logo || null);
@@ -230,6 +251,7 @@ export default function SponsorDashboard({ user }) {
   const [profile, setProfile] = useState(null);
   const [brandTypes, setBrandTypes] = useState([]);
   const [events, setEvents] = useState([]);
+  const [applications, setApplications] = useState([]);
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState(null);
   const [submittingBrand, setSubmittingBrand] = useState(false);
@@ -243,7 +265,7 @@ export default function SponsorDashboard({ user }) {
     setLoading(true);
     try {
       // Use .catch(() => null) for getSponsorProfile so it doesn't crash the whole page if 404 (first time user)
-      const [profRes, evtsRes, compRes, typesRes] = await Promise.all([
+      const [profRes, evtsRes, compRes, typesRes, appsRes] = await Promise.all([
         getSponsorProfile().catch((err) => {
           if (err.response?.status !== 404) console.error("Profile fetch error:", err);
           return null;
@@ -251,9 +273,14 @@ export default function SponsorDashboard({ user }) {
         getSponsorEvents({ page: 1, limit: 100 }).catch(() => null),
         getSponsorCompletedEvents({ page: 1, limit: 100 }).catch(() => null),
         fetchBrandTypes().catch(() => []),
+        getMyApplications().catch((err) => {
+          toast.error(getErrorMessage(err));
+          return null;
+        }),
       ]);
 
       setProfile(profRes?.data || null);
+      setApplications(appsRes?.data || []);
 
       const upcoming = evtsRes?.data?.events || evtsRes?.data || [];
       const completed = compRes?.data?.events || compRes?.data || [];
@@ -441,6 +468,25 @@ export default function SponsorDashboard({ user }) {
             <h3 className="text-2xl font-black mb-2">Create your brand profile</h3>
             <p className="muted mb-6">Complete your profile to unlock high-fit AI event analysis and predictions.</p>
             <button className="btn-primary" onClick={() => setMode("create")}>Get started</button>
+          </div>
+        )}
+      </section>
+
+      {/* Applications section */}
+      <section className="surface-card">
+        <div className="section-kicker mb-2">Sponsorship pipeline</div>
+        <h2 className="section-title">My applications</h2>
+        {applications.length === 0 ? (
+          <p className="muted mt-4">Open an upcoming event and apply for sponsorship to track it here.</p>
+        ) : (
+          <div className="space-y-3 mt-6">
+            {applications.map((application) => (
+              <ApplicationRow
+                key={application._id}
+                application={application}
+                onOpen={() => navigate(`/sponsor/event/${application.event._id}`)}
+              />
+            ))}
           </div>
         )}
       </section>

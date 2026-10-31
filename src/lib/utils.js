@@ -1,3 +1,9 @@
+export const APPLICATION_STATUS_CLASS = {
+  pending: "status-chip status-completed",
+  accepted: "status-chip status-upcoming",
+  rejected: "status-chip status-cancelled",
+};
+
 export function cn(...xs) {
   return xs.filter(Boolean).join(" ");
 }

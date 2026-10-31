@@ -220,12 +220,13 @@ A Node.js + Express REST API that manages all application data, user authenticat
 
 **Organizer Domain**
 - Create and manage events with image uploads to Cloudinary
-- Track sponsor applications per event
+- Review sponsor applications per event and accept or reject each one
 - View ML-powered analysis results for their events
 - Receive post-event feedback that feeds back into reputation scores
 
 **Sponsor Domain**
-- Browse events
+- Browse events and apply for sponsorship (one application per upcoming event, with an offered amount and an optional message)
+- Track application status from the dashboard
 - View deal analysis powered by the ML service
 - Access AI-generated negotiation points and cold email drafts
 
@@ -244,7 +245,7 @@ A Node.js + Express REST API that manages all application data, user authenticat
 
 ### Database Models
 
-`User` · `Organizer` (events) · `Sponser` (sponsor profiles) · `SponsorApplication` (schema only, no routes yet) · `Conversation` · `Message` · `OTP` · `EventCategory` · `EventFeedBack` · `City` · `SponsorBrandTypes` · `Admin`
+`User` · `Organizer` (events) · `Sponser` (sponsor profiles) · `SponsorApplication` (apply, accept and reject are built; the schema's negotiation and withdrawal fields are not used yet) · `Conversation` · `Message` · `OTP` · `EventCategory` · `EventFeedBack` · `City` · `SponsorBrandTypes` · `Admin`
 
 ---
 

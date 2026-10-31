@@ -9,8 +9,10 @@ import {
   getSponsorProfile,
   giveEventFeedback,
   updateEventFeedback,
+  applyToEvent,
+  getMyEventApplication,
 } from "@/lib/api";
-import { fmtINR, getErrorMessage, coldEmailToText, resolveMediaUrl } from "@/lib/utils";
+import { APPLICATION_STATUS_CLASS, fmtINR, getErrorMessage, coldEmailToText, resolveMediaUrl } from "@/lib/utils";
 import ResultsPanel from "@/components/results/ResultsPanel";
 import ChatBox from "@/components/ChatBox";
 import { useAuth } from "@/context/AuthContext";
@@ -68,6 +70,38 @@ function FeedbackForm({ initial, onSubmit, submitting, submitLabel }) {
   );
 }
 
+function ApplyForm({ ask, onSubmit, onClose, submitting }) {
+  return (
+    <div className="modal-overlay">
+      <div className="modal-card animate-fade-up">
+        <div className="modal-header">
+          <div>
+            <h3 className="text-3xl font-black">Apply for sponsorship</h3>
+            <p className="muted mt-1">You can apply once. The organizer will accept or reject your offer.</p>
+          </div>
+          <button type="button" className="btn-secondary" onClick={onClose}>Close</button>
+        </div>
+
+        <form onSubmit={onSubmit} className="space-y-6">
+          <div>
+            <label className="field-label">Offered amount (₹)</label>
+            <input name="amount" type="number" min="1" defaultValue={ask || ""} required className="input-field" />
+          </div>
+
+          <div>
+            <label className="field-label">Message to organizer (optional)</label>
+            <textarea name="message" rows={4} maxLength={1000} className="textarea-field" placeholder="What would your brand want from this sponsorship?" />
+          </div>
+
+          <button type="submit" disabled={submitting} className="btn-primary w-full">
+            {submitting ? "Submitting..." : "Submit application"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function SponsorEventPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -82,6 +116,9 @@ export default function SponsorEventPage() {
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [organizerQualityMetrics, setOrganizerQualityMetrics] = useState(null);
   const [showChat, setShowChat] = useState(false);
+  const [application, setApplication] = useState(null);
+  const [showApplyForm, setShowApplyForm] = useState(false);
+  const [applying, setApplying] = useState(false);
 
   const DEFAULT_RATINGS = { organizerReputation: 0.5, lineupQuality: 0.55, activationMaturity: 0.5 };
 
@@ -149,6 +186,13 @@ export default function SponsorEventPage() {
       } catch {
         setMyFeedback(null);
       }
+
+      try {
+        const appRes = await getMyEventApplication(id);
+        setApplication(appRes?.data || null);
+      } catch (err) {
+        toast.error(getErrorMessage(err));
+      }
     } catch (err) {
       toast.error(getErrorMessage(err));
       navigate(-1);
@@ -193,6 +237,24 @@ export default function SponsorEventPage() {
     setSubmittingFeedback(false);
   };
 
+  const handleApply = async (e) => {
+    e.preventDefault();
+    setApplying(true);
+    const form = new FormData(e.currentTarget);
+    try {
+      const res = await applyToEvent(id, {
+        amount: Number(form.get("amount")),
+        message: form.get("message"),
+      });
+      setApplication(res?.data || null);
+      setShowApplyForm(false);
+      toast.success("Application submitted");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+    setApplying(false);
+  };
+
   if (workspaceLoading) {
     return (
       <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -202,6 +264,8 @@ export default function SponsorEventPage() {
   }
 
   if (!eventDetail) return null;
+
+  const canApply = eventDetail.status === "upcoming" && new Date(eventDetail.date) >= new Date();
 
   return (
     <div className="space-y-6">
@@ -255,7 +319,15 @@ export default function SponsorEventPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {application ? (
+              <span className={APPLICATION_STATUS_CLASS[application.status] || APPLICATION_STATUS_CLASS.pending}>
+                Application {application.status}
+                {application.status === "accepted" ? ` · ₹${fmtINR(application.finalAmount)}` : ""}
+              </span>
+            ) : canApply ? (
+              <button className="btn-primary" onClick={() => setShowApplyForm(true)}>Apply for sponsorship</button>
+            ) : null}
             <button className="btn-secondary" onClick={() => setShowChat(true)}>Chat with organizer</button>
           </div>
         </div>
@@ -336,6 +408,15 @@ export default function SponsorEventPage() {
           </div>
         )}
       </section>
+
+      {showApplyForm && (
+        <ApplyForm
+          ask={eventDetail.ask}
+          onSubmit={handleApply}
+          onClose={() => setShowApplyForm(false)}
+          submitting={applying}
+        />
+      )}
 
       {showChat && (
         <ChatBox

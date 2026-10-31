@@ -165,6 +165,16 @@ export async function deleteEvent(eventId) {
   return data;
 }
 
+export async function getEventApplications(eventId) {
+  const { data } = await backend.get(`organizer/events/${eventId}/applications`);
+  return data;
+}
+
+export async function updateApplicationStatus(eventId, applicationId, status) {
+  const { data } = await backend.patch(`organizer/events/${eventId}/applications/${applicationId}`, { status });
+  return data;
+}
+
 // ─────────────────────────────
 // Sponsor routes
 // ─────────────────────────────
@@ -223,6 +233,22 @@ export async function getEventPrediction(eventId) {
 // Sponsor — completed events (for feedback board)
 export async function getSponsorCompletedEvents(params = {}) {
   const { data } = await backend.get("sponsor/completed-events", { params });
+  return data;
+}
+
+// Sponsor — sponsorship applications
+export async function applyToEvent(eventId, payload) {
+  const { data } = await backend.post(`sponsor/events/${eventId}/application`, payload);
+  return data;
+}
+
+export async function getMyEventApplication(eventId) {
+  const { data } = await backend.get(`sponsor/events/${eventId}/application`);
+  return data;
+}
+
+export async function getMyApplications() {
+  const { data } = await backend.get("sponsor/applications");
   return data;
 }
 
