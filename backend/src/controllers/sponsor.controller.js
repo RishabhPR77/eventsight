@@ -1,4 +1,6 @@
+const crypto = require("crypto");
 const { default: mongoose } = require("mongoose");
+const { Prediction } = require("../models/prediction.model");
 const { EventCategory } = require("../models/eventCategory.model");
 const { Organizer } = require("../models/organizer.model");
 const { BrandType } = require("../models/sponserBrandTypes.model");
@@ -49,6 +51,19 @@ const buildFeedbackAggregateFields = () => ({
         ]
     }
 })
+
+const applyEventFilters = (filter, query) => {
+    if (query.search) {
+        const term = { $regex: escapeRegex(query.search), $options: "i" }
+        filter.$or = [{ eventName: term }, { location: term }]
+    }
+    if (query.category && mongoose.Types.ObjectId.isValid(query.category)) {
+        filter.eventCategory = new mongoose.Types.ObjectId(query.category)
+    }
+    if (query.location) {
+        filter.location = String(query.location)
+    }
+}
 
 const createSponsorProfile = asyncHandler(async (req, res) => {
     // Check if ANY profile exists (including deleted ones)
@@ -218,17 +233,7 @@ const getAllEvents = asyncHandler(async (req, res) => {
         date: { $gte: eventCutoff() }
     }
 
-    if (req.query.search) {
-        filter.eventName = { $regex: escapeRegex(req.query.search), $options: "i" }
-    }
-
-    if (req.query.category) {
-        filter.eventCategory = new mongoose.Types.ObjectId(req.query.category)
-    }
-
-    if (req.query.location) {
-        filter.location = { $regex: escapeRegex(req.query.location), $options: "i" }
-    }
+    applyEventFilters(filter, req.query)
 
     if (req.query.isIndoor !== undefined) {
         filter.isIndoor = req.query.isIndoor === "true"
@@ -666,51 +671,75 @@ const getPrediction = asyncHandler(async (req, res) => {
         ? (activationStats[0].total + DEFAULT_FEEDBACK_RATINGS.activationMaturity) / (activationStats[0].count + 1)
         : DEFAULT_FEEDBACK_RATINGS.activationMaturity
 
+    const brandInput = {
+        company_name:      sponsorProfile.brandName,
+        industry:          sponsorProfile.brandType.name,
+        brand_description: sponsorProfile.description
+    }
+
+    const predictInput = {
+        city:                      eventData.location,
+        event_type:                eventData.eventCategory?.name || "",
+        sponsor_category:          sponsorProfile.brandType.name,
+        brand_name:                sponsorProfile.brandName,
+        brand_description:         sponsorProfile.description,
+        event_description:         eventData.eventDescription,
+        date:                      new Date(eventData.date).toISOString().split("T")[0],
+        price:                     eventData.ticketPrice,
+        marketing_budget:          eventData.marketingBudget,
+        sponsor_amount:            eventData.ask,
+        venue_capacity:            eventData.capacity,
+        organizer_reputation:      avgOrganizerReputation,
+        lineup_quality:            avgLineupQuality,
+        brand_activation_maturity: avgActivationMaturity,
+        is_indoor:                 eventData.isIndoor ? 1 : 0,
+        is_festive:                eventData.isFestive ? 1 : 0,
+        social_media_reach:        eventData.totalSocialReach,
+        past_events_organized:     eventData.pastEventOrganized,
+        brand_kpi:                 sponsorProfile.brandKpi,
+        brand_city_focus:          sponsorProfile.cityFocus
+    }
+
+    const inputsHash = crypto.createHash("sha256").update(JSON.stringify(predictInput)).digest("hex")
+
+    const saved = await Prediction.findOne({ sponsor: req.user._id, event: eventData._id, inputsHash }).lean()
+    if (saved) {
+        return res.status(200).json(
+            new ApiResponse(200, { ...saved.result, savedAt: saved.updatedAt }, "Prediction fetched successfully")
+        )
+    }
+
     let analyzeBrandResponse
     try {
-        analyzeBrandResponse = await postToMl("/analyze-brand", {
-            company_name:      sponsorProfile.brandName,
-            industry:          sponsorProfile.brandType.name,
-            brand_description: sponsorProfile.description
-        })
+        analyzeBrandResponse = await postToMl("/analyze-brand", brandInput)
     } catch (error) {
         throw new ApiError(500, "Brand analysis failed")
     }
 
     let predictResponse
     try {
-        predictResponse = await postToMl("/predict", {
-            city:                      eventData.location,
-            event_type:                eventData.eventCategory?.name || "",
-            sponsor_category:          sponsorProfile.brandType.name,
-            brand_name:                sponsorProfile.brandName,
-            brand_description:         sponsorProfile.description,
-            event_description:         eventData.eventDescription,
-            date:                      new Date(eventData.date).toISOString().split("T")[0],
-            price:                     eventData.ticketPrice,
-            marketing_budget:          eventData.marketingBudget,
-            sponsor_amount:            eventData.ask,
-            venue_capacity:            eventData.capacity,
-            organizer_reputation:      avgOrganizerReputation,
-            lineup_quality:            avgLineupQuality,
-            brand_activation_maturity: avgActivationMaturity,
-            is_indoor:                 eventData.isIndoor ? 1 : 0,
-            is_festive:                eventData.isFestive ? 1 : 0,
-            social_media_reach:        eventData.totalSocialReach,
-            past_events_organized:     eventData.pastEventOrganized,
-            brand_kpi:                 sponsorProfile.brandKpi,
-            brand_city_focus:          sponsorProfile.cityFocus
-        })
+        predictResponse = await postToMl("/predict", predictInput)
     } catch (error) {
         console.log(error.response?.data);
         throw new ApiError(500, "Prediction failed")
     }
 
+    const result = {
+        brandAnalysis: analyzeBrandResponse.data,
+        prediction: predictResponse.data
+    }
+
+    // Two tabs can finish together, and the unique index keeps one of their answers
+    await Prediction.findOneAndUpdate(
+        { sponsor: req.user._id, event: eventData._id },
+        { $set: { inputsHash, result } },
+        { upsert: true }
+    ).catch((error) => {
+        if (error.code !== 11000) throw error
+    })
+
     return res.status(200).json(
-        new ApiResponse(200, {
-            brandAnalysis: analyzeBrandResponse.data,
-            prediction: predictResponse.data
-        }, "Prediction fetched successfully")
+        new ApiResponse(200, result, "Prediction fetched successfully")
     )
 })
 
@@ -725,9 +754,7 @@ const getCompletedEvents = asyncHandler(async (req, res) => {
         date: { $lt: eventCutoff() }
     }
 
-    if (req.query.search) {
-        filter.eventName = { $regex: escapeRegex(req.query.search), $options: "i" }
-    }
+    applyEventFilters(filter, req.query)
 
     const result = await Organizer.aggregate([
         { $match: filter },

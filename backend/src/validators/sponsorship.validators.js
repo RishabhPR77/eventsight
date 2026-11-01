@@ -13,4 +13,10 @@ const organizerConfirmSchema = z.object({
     activationMaturity: rating("Activation maturity")
 });
 
-module.exports = { feedbackSchema, organizerConfirmSchema };
+const cancelDealSchema = z.object({
+    reason: z.string({ error: "Please give a reason" }).trim()
+        .min(5, "Please give a short reason")
+        .max(500, "Reason must be 500 characters or fewer")
+});
+
+module.exports = { feedbackSchema, organizerConfirmSchema, cancelDealSchema };

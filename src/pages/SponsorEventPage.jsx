@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { ArrowLeft, CalendarDays, MapPin, MessageCircle, Sparkles, Star } from "lucide-react";
+import CancelDealModal from "@/components/events/CancelDealModal";
 import DealProgress from "@/components/events/DealProgress";
 import { EventCover } from "@/components/events/EventCard";
 import OfferHistory from "@/components/events/OfferHistory";
@@ -16,6 +17,7 @@ import { useResource } from "@/hooks/useResource";
 import {
   acceptOfferAsSponsor,
   applyToEvent,
+  cancelDealAsSponsor,
   confirmSponsorship,
   counterAsSponsor,
   getMyEventApplication,
@@ -103,13 +105,22 @@ function FeedbackModal({ existing, eventId, onClose, onDone }) {
   );
 }
 
-function DealCard({ detail, application, feedback, hasProfile, onApply, onAccept, onCounter, onWithdraw, onConfirm, onFeedback }) {
+const CANCELLED_BY = { sponsor: "You", organizer: "The organizer" };
+
+const cancelledNote = (application) => (
+  application.cancelledBy === "system"
+    ? application.cancelReason
+    : `${CANCELLED_BY[application.cancelledBy]} cancelled this sponsorship: ${application.cancelReason}`
+);
+
+function DealCard({ detail, application, feedback, hasProfile, onApply, onAccept, onCounter, onWithdraw, onConfirm, onFeedback, onCancel }) {
   const eventDone = detail.status === "completed";
   const accepted = application?.status === "accepted";
   const open = ["pending", "negotiating"].includes(application?.status);
   const latest = application?.negotiations?.at(-1);
   const myTurn = open && !eventDone && latest?.from === "organizer";
   const bothConfirmed = Boolean(application?.sponsorConfirmedAt && application?.organizerConfirmedAt);
+  const cancelled = application?.status === "cancelled";
 
   let action = null;
   if (!application && !eventDone) {
@@ -145,7 +156,10 @@ function DealCard({ detail, application, feedback, hasProfile, onApply, onAccept
   else if (application.status === "rejected") note = "The organizer didn't accept this offer.";
   else if (application.status === "withdrawn") note = "You withdrew this offer.";
   else if (accepted && !eventDone) note = "Your sponsorship is agreed. You can confirm it after the event.";
-  else if (accepted && application.sponsorConfirmedAt && !application.organizerConfirmedAt) note = "You confirmed. Waiting for the organizer, then feedback opens.";
+  else if (cancelled) note = cancelledNote(application);
+  else if (accepted && application.autoConfirmed) note = "Confirmed automatically after 7 days without a reply.";
+  else if (accepted && application.sponsorConfirmedAt && !application.organizerConfirmedAt) note = "You confirmed. If the organizer doesn't reply within 7 days, it's confirmed automatically and feedback opens.";
+  else if (accepted && application.organizerConfirmedAt && !application.sponsorConfirmedAt) note = "The organizer confirmed. If you don't reply within 7 days, it's confirmed automatically.";
 
   return (
     <Card className="p-5">
@@ -155,12 +169,17 @@ function DealCard({ detail, application, feedback, hasProfile, onApply, onAccept
       </div>
       {accepted ? <p className="mt-1 font-display text-2xl font-bold text-brand">{rupees(application.finalAmount)}</p> : null}
       {open ? <p className="mt-1 font-display text-2xl font-bold text-brand">{rupees(latest?.amount)}</p> : null}
-      <div className="mt-4">
-        <DealProgress application={application} eventDone={eventDone} hasFeedback={Boolean(feedback)} />
-      </div>
+      {cancelled ? null : (
+        <div className="mt-4">
+          <DealProgress application={application} eventDone={eventDone} hasFeedback={Boolean(feedback)} />
+        </div>
+      )}
       {note ? <p className="mt-4 text-sm text-ink-soft">{note}</p> : null}
       <OfferHistory negotiations={application?.negotiations} viewer="sponsor" className="mt-3" />
       {action ? <div className="mt-4">{action}</div> : null}
+      {accepted && !bothConfirmed ? (
+        <Button variant="ghost" className="mt-2 w-full" onClick={onCancel}>Cancel sponsorship</Button>
+      ) : null}
     </Card>
   );
 }
@@ -173,6 +192,7 @@ export default function SponsorEventPage() {
   const [applying, setApplying] = useState(false);
   const [countering, setCountering] = useState(false);
   const [rating, setRating] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const event = useResource(() => getSponsorEventById(id).then((res) => res.data), [id]);
   const application = useResource(() => getMyEventApplication(id).then((res) => res.data), [id]);
@@ -257,6 +277,17 @@ export default function SponsorEventPage() {
     }
   };
 
+  const handleCancel = async (reason) => {
+    try {
+      await cancelDealAsSponsor(id, reason);
+      toast.success("Sponsorship cancelled");
+      setCancelling(false);
+      application.reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
+
   return (
     <>
       <Link to="/" className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink">
@@ -280,7 +311,7 @@ export default function SponsorEventPage() {
             </div>
             <p className="mt-4 whitespace-pre-line text-ink-soft">{detail.eventDescription}</p>
 
-            <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-line pt-5 md:grid-cols-4">
+            <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-line pt-5 xl:grid-cols-4">
               <Fact label="Sponsorship ask" value={rupees(detail.ask)} />
               <Fact label="Capacity" value={fmtINR(detail.capacity)} />
               <Fact label="Ticket price" value={detail.ticketPrice ? rupees(detail.ticketPrice) : "Free"} />
@@ -311,6 +342,7 @@ export default function SponsorEventPage() {
             onWithdraw={handleWithdraw}
             onConfirm={handleConfirm}
             onFeedback={() => setRating(true)}
+            onCancel={() => setCancelling(true)}
           />
 
           {upcoming ? (
@@ -360,6 +392,8 @@ export default function SponsorEventPage() {
         onClose={() => setCountering(false)}
         onSubmit={handleCounter}
       />
+
+      <CancelDealModal open={cancelling} onClose={() => setCancelling(false)} onSubmit={handleCancel} />
     </>
   );
 }

@@ -35,4 +35,13 @@ const uploadOnCloudinary=async(localFilePath,{resourceType="auto"}={})=>{
     }
 }
 
-module.exports={uploadOnCloudinary}
+const ATTACHMENT_LINK_SECONDS=300
+
+// Cloudinary blocks public PDF delivery on free accounts, so PDFs need a signed link
+const signedDownloadUrl=(publicId)=>cloudinary.utils.private_download_url(publicId,"",{
+    resource_type:"raw",
+    type:"upload",
+    expires_at:Math.floor(Date.now()/1000)+ATTACHMENT_LINK_SECONDS
+})
+
+module.exports={uploadOnCloudinary,signedDownloadUrl}

@@ -46,6 +46,22 @@ const sponsorApplicationSchema=new mongoose.Schema({
     organizerConfirmedAt:{
         type:Date
     },
+    // Set when the other side stayed silent after one side confirmed
+    autoConfirmed:{
+        type:Boolean,
+        default:false
+    },
+    cancelledBy:{
+        type:String,
+        enum:["organizer","sponsor","system"]
+    },
+    cancelReason:{
+        type:String,
+        trim:true
+    },
+    cancelledAt:{
+        type:Date
+    },
     // The organizer's rating of how well this brand ran its activation
     activationRating:{
         type:Number,
@@ -54,7 +70,7 @@ const sponsorApplicationSchema=new mongoose.Schema({
     },
     status:{
         type:String,
-        enum:["pending","negotiating","accepted","rejected","withdrawn"],
+        enum:["pending","negotiating","accepted","rejected","withdrawn","cancelled"],
         default:"pending",
         index:true
     },

@@ -2,9 +2,9 @@ const express=require("express");
 const { verifyJwt } = require("../middleware/auth.middleware");
 const { authorizeRole } = require("../middleware/roleCheck");
 const { createSponsorProfile, getSponsorProfile, updateSponsorProfile, deleteSponsorProfile, giveFeedback, getCompletedEvents,getMyFeedback, getEventById, getAllEvents, updateFeedback, getPrediction } = require("../controllers/sponsor.controller");
-const { applyToEvent, getMyApplications, getMyEventApplication, withdrawApplication, confirmAsSponsor, counterAsSponsor, acceptAsSponsor, getSponsorHistory } = require("../controllers/application.controller");
+const { applyToEvent, getMyApplications, getMyEventApplication, withdrawApplication, confirmAsSponsor, counterAsSponsor, acceptAsSponsor, getSponsorHistory, cancelAsSponsor } = require("../controllers/application.controller");
 const { validateBody } = require("../middleware/validate.middleware");
-const { feedbackSchema } = require("../validators/sponsorship.validators");
+const { cancelDealSchema, feedbackSchema } = require("../validators/sponsorship.validators");
 const { uploadImage } = require("../middleware/multer.middleware");
 const { predictionLimiter } = require("../middleware/rateLimit.middleware");
 
@@ -36,6 +36,7 @@ sponsorRoute.get("/events/:id/application",verifyJwt,authorizeRole("sponsor"),ge
 sponsorRoute.post("/events/:id/application/withdraw",verifyJwt,authorizeRole("sponsor"),withdrawApplication);
 sponsorRoute.post("/events/:id/application/counter",verifyJwt,authorizeRole("sponsor"),counterAsSponsor);
 sponsorRoute.post("/events/:id/application/accept",verifyJwt,authorizeRole("sponsor"),acceptAsSponsor);
+sponsorRoute.post("/events/:id/application/cancel",verifyJwt,authorizeRole("sponsor"),validateBody(cancelDealSchema),cancelAsSponsor);
 sponsorRoute.post("/events/:id/application/confirm",verifyJwt,authorizeRole("sponsor"),confirmAsSponsor);
 
 // predict

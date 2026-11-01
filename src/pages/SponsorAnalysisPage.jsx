@@ -5,6 +5,7 @@ import Button from "@/components/ui/Button";
 import { Card, ErrorState } from "@/components/ui/Primitives";
 import { useResource } from "@/hooks/useResource";
 import { getEventPrediction, getSponsorEventById, getSponsorProfile } from "@/lib/api";
+import { timeAgo } from "@/lib/utils";
 
 function Analyzing() {
   return (
@@ -40,6 +41,9 @@ export default function SponsorAnalysisPage() {
       {error ? <Card><ErrorState error={error} onRetry={reload} /></Card> : null}
       {data ? (
         <>
+          {data.prediction.savedAt ? (
+            <p className="mb-4 text-sm text-ink-faint">Saved analysis from {timeAgo(data.prediction.savedAt)}. It updates when the event or your brand changes.</p>
+          ) : null}
           <ResultsPanel
             result={data.prediction}
             brandCategory={data.profile?.brandType?.name}

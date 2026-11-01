@@ -463,7 +463,7 @@ const deleteAccount=asyncHandler(async(req,res)=>{
 });
 
 const updateProfile=asyncHandler(async(req,res)=>{
-    const {username,email}=req.body;
+    const {username,email,emailAlerts}=req.body;
 
     const user=await User.findById(req.user._id);
     if(!user){
@@ -477,6 +477,10 @@ const updateProfile=asyncHandler(async(req,res)=>{
         }
 
         user.username=username.toLowerCase().trim();
+    }
+
+    if(emailAlerts!==undefined){
+        user.emailAlerts=emailAlerts;
     }
 
     const newEmail=email?.toLowerCase().trim();

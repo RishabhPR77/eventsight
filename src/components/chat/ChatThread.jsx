@@ -12,6 +12,7 @@ import {
   acceptOfferAsSponsor,
   counterAsOrganizer,
   counterAsSponsor,
+  getAttachmentLink,
   getConversation,
   getConversationMessages,
   markConversationRead,
@@ -91,7 +92,19 @@ function DealBar({ conversation, onChanged }) {
   );
 }
 
-function Attachment({ file, mine }) {
+function Attachment({ file, messageId, mine }) {
+  // PDFs open through a short-lived signed link, fetched when they're clicked.
+  // The tab opens first, because browsers block pop-ups opened after a wait.
+  const openPdf = async () => {
+    const tab = window.open("", "_blank");
+    try {
+      tab.location = await getAttachmentLink(messageId);
+    } catch (err) {
+      tab?.close();
+      toast.error(getErrorMessage(err));
+    }
+  };
+
   if (file.type?.startsWith("image/")) {
     return (
       <a href={file.url} target="_blank" rel="noreferrer" className="block">
@@ -100,18 +113,17 @@ function Attachment({ file, mine }) {
     );
   }
   return (
-    <a
-      href={file.url}
-      target="_blank"
-      rel="noreferrer"
-      className={cn("flex items-center gap-2.5 rounded-xl p-2.5 transition", mine ? "bg-white/15 hover:bg-white/25" : "bg-paper hover:bg-sand")}
+    <button
+      type="button"
+      onClick={openPdf}
+      className={cn("flex w-full items-center gap-2.5 rounded-xl p-2.5 text-left transition", mine ? "bg-white/15 hover:bg-white/25" : "bg-paper hover:bg-sand")}
     >
       <FileText className="h-5 w-5 shrink-0" aria-hidden="true" />
       <span className="min-w-0">
         <span className="block truncate text-sm font-semibold">{file.name}</span>
         <span className={cn("block text-xs", mine ? "text-white/70" : "text-ink-faint")}>{Math.max(1, Math.round((file.size || 0) / 1024))} KB</span>
       </span>
-    </a>
+    </button>
   );
 }
 
@@ -122,7 +134,7 @@ function Bubble({ message, mine, compact }) {
         "max-w-[85%] rounded-2xl px-3 py-2 sm:max-w-[70%]",
         mine ? "rounded-br-md bg-brand text-white" : "rounded-bl-md border border-line bg-white text-ink"
       )}>
-        {message.attachment?.url ? <Attachment file={message.attachment} mine={mine} /> : null}
+        {message.attachment?.url ? <Attachment file={message.attachment} messageId={message._id} mine={mine} /> : null}
         {message.text ? <p className={cn("whitespace-pre-wrap break-words text-[15px] leading-snug", message.attachment?.url && "mt-1.5")}>{message.text}</p> : null}
         <p className={cn("mt-0.5 flex items-center justify-end gap-1 text-[11px]", mine ? "text-white/70" : "text-ink-faint")}>
           {fmtTime(message.createdAt)}

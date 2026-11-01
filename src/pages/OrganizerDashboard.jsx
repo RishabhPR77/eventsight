@@ -4,8 +4,9 @@ import { ArrowRight, CalendarCheck, CalendarDays, CalendarPlus, Handshake, Inbox
 import Button from "@/components/ui/Button";
 import EventCard, { EventGridSkeleton } from "@/components/events/EventCard";
 import EventForm from "@/components/events/EventForm";
-import { Avatar, Card, EmptyState, ErrorState, PageHeader, Stat, Tabs } from "@/components/ui/Primitives";
+import { Avatar, Card, EmptyState, ErrorState, LoadMore, PageHeader, Stat, Tabs } from "@/components/ui/Primitives";
 import { useAuth } from "@/context/AuthContext";
+import { useDebouncedValue, usePagedList } from "@/hooks/usePagedList";
 import { useResource } from "@/hooks/useResource";
 import { getOrganizerApplications, getOrganizerEvents } from "@/lib/api";
 import { rupees } from "@/lib/utils";
@@ -51,10 +52,16 @@ export default function OrganizerDashboard() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("");
 
-  const events = useResource(() => getOrganizerEvents({ page: 1, limit: 50 }).then((res) => res.data.events));
+  const term = useDebouncedValue(search.trim());
+  const events = usePagedList(
+    (paging) => getOrganizerEvents({ ...paging, type: filter || undefined, search: term || undefined }).then((res) => res.data),
+    [filter, term]
+  );
   const applications = useResource(() => getOrganizerApplications().then((res) => res.data));
 
-  const list = useMemo(() => events.data || [], [events.data]);
+  const shown = events.items;
+  const upcoming = events.summary?.upcoming || 0;
+  const completed = events.summary?.completed || 0;
   const deals = useMemo(() => applications.data || [], [applications.data]);
 
   const attention = useMemo(() => deals.filter((item) => {
@@ -63,15 +70,6 @@ export default function OrganizerDashboard() {
     return item.event.status === "upcoming" && item.negotiations?.at(-1)?.from === "sponsor";
   }), [deals]);
 
-  const shown = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return list.filter((event) => (
-      (!filter || event.status === filter)
-      && (!term || event.eventName.toLowerCase().includes(term) || event.location.toLowerCase().includes(term))
-    ));
-  }, [list, search, filter]);
-
-  const upcoming = list.filter((event) => event.status === "upcoming").length;
   const accepted = deals.filter((item) => item.status === "accepted").length;
 
   return (
@@ -84,7 +82,7 @@ export default function OrganizerDashboard() {
 
       <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Upcoming events" value={upcoming} icon={CalendarDays} />
-        <Stat label="Completed events" value={list.length - upcoming} icon={CalendarCheck} />
+        <Stat label="Completed events" value={completed} icon={CalendarCheck} />
         <Stat label="Open offers" value={deals.filter((item) => item.status !== "accepted").length} icon={Inbox} />
         <Stat label="Accepted sponsors" value={accepted} icon={Handshake} />
       </div>
@@ -97,7 +95,7 @@ export default function OrganizerDashboard() {
           <Tabs tabs={FILTERS} value={filter} onChange={setFilter} label="Filter events" />
         </div>
 
-        {list.length > 3 ? (
+        {upcoming + completed > 3 ? (
           <div className="relative mb-4 max-w-sm">
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" aria-hidden="true" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search your events" placeholder="Search your events" className="field-control pl-10" />
@@ -105,10 +103,10 @@ export default function OrganizerDashboard() {
         ) : null}
 
         {events.loading ? <EventGridSkeleton /> : null}
-        {events.error ? <Card><ErrorState error={events.error} onRetry={events.reload} /></Card> : null}
+        {events.error && shown.length === 0 ? <Card><ErrorState error={events.error} onRetry={events.reload} /></Card> : null}
         {!events.loading && !events.error && shown.length === 0 ? (
           <Card>
-            {list.length === 0 ? (
+            {upcoming + completed === 0 ? (
               <EmptyState
                 icon={CalendarPlus}
                 title="Create your first event"
@@ -123,6 +121,7 @@ export default function OrganizerDashboard() {
             {shown.map((event) => <EventCard key={event._id} event={event} to={`/organizer/event/${event._id}`} />)}
           </div>
         ) : null}
+        <LoadMore list={events} />
       </section>
 
       <EventForm

@@ -18,12 +18,14 @@ const { sponsorRoute } = require("./routes/sponsor.route.js")
 const { chatRoute } = require("./routes/chat.route.js")
 const { mlRoute } = require("./routes/ml.route.js")
 const { notificationRoute } = require("./routes/notification.route.js")
+const { isTrustedOrigin, requireTrustedOrigin } = require("./middleware/origin.middleware.js")
 const { rejectOperatorKeys } = require("./middleware/validate.middleware.js")
 const { notFound, errorHandler } = require("./middleware/error.middleware.js")
 const http = require("http")
 const { Server } = require("socket.io")
 const chatSocket = require("./socket/chatSocket.js")
 const { startEventExpiryJob } = require("./jobs/eventExpiry.job.js")
+const { startDealResolutionJob } = require("./jobs/dealResolution.job.js")
 
 const SHUTDOWN_TIMEOUT_MS = 10000
 
@@ -41,6 +43,8 @@ app.use(cors({
 const server = http.createServer(app)
 const io = new Server(server, {
     maxHttpBufferSize: 16 * 1024,
+    // WebSocket upgrades skip CORS, so foreign sites have to be turned away here
+    allowRequest: (req, callback) => callback(null, isTrustedOrigin(req.headers.origin)),
     cors: {
         origin: `${process.env.CLIENT_ORIGIN}`,
         credentials: true
@@ -50,6 +54,7 @@ const io = new Server(server, {
 chatSocket(io)
 
 
+app.use(requireTrustedOrigin)
 app.use(express.json({ limit: "16kb" }))
 app.use(express.urlencoded({ limit: "16kb", extended: true }))
 app.use(cookieParser())
@@ -92,6 +97,7 @@ process.on("unhandledRejection", (reason) => {
 
 connectDb().then(() => {
     startEventExpiryJob()
+    startDealResolutionJob()
     server.listen(process.env.PORT || 8000, () => {
         console.log(`app is listening on the port ${process.env.PORT || 8000} `)
     })

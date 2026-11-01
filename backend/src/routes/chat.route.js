@@ -11,7 +11,7 @@ const {verifyJwt} = require('../middleware/auth.middleware');
 const {uploadAttachment} = require('../middleware/multer.middleware');
 const {isParticipant} = require('../utility/chatAccess');
 const {findOrCreateConversation, postMessage} = require('../utility/chatService');
-const {uploadOnCloudinary} = require('../utility/cloudinary');
+const {signedDownloadUrl, uploadOnCloudinary} = require('../utility/cloudinary');
 const {emitToRoom} = require('../utility/notifier');
 
 const MESSAGE_HISTORY_LIMIT = 200;
@@ -167,6 +167,26 @@ router.get('/messages/:conversationId', async (req, res) => {
   }
 });
 
+// A short-lived link to a message's PDF, only for the two people in that chat
+router.get('/messages/:messageId/attachment', async (req, res) => {
+  try {
+    if (!isValidId(req.params.messageId)) {
+      return res.status(400).json({ error: "Invalid message id" });
+    }
+    const message = await Message.findById(req.params.messageId);
+    const convo = message && await Conversation.findById(message.conversationId);
+    if (!message?.attachment?.publicId || !convo) {
+      return res.status(404).json({ error: "File not found" });
+    }
+    if (!isParticipant(convo, req.user._id)) {
+      return res.status(403).json({ error: "Not a participant of this conversation" });
+    }
+    res.json({ url: signedDownloadUrl(message.attachment.publicId) });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to open file" });
+  }
+});
+
 router.post('/conversations/:conversationId/read', async (req, res) => {
   try {
     const convo = await loadOwnConversation(req, res);
@@ -200,7 +220,7 @@ router.post('/conversations/:conversationId/attachments', ...uploadAttachment('f
       senderId: req.user._id,
       senderRole: String(convo.sponsorId) === String(req.user._id) ? 'sponsor' : 'organizer',
       text: String(req.body?.text || '').trim().slice(0, 2000),
-      attachment: { url: upload.secure_url || upload.url, name, type: req.file.mimetype, size: req.file.size }
+      attachment: { url: upload.secure_url || upload.url, publicId: upload.public_id, name, type: req.file.mimetype, size: req.file.size }
     });
     res.status(201).json(message);
   } catch (err) {

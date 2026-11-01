@@ -329,6 +329,16 @@ export async function withdrawApplication(eventId) {
   return data;
 }
 
+export async function cancelDealAsSponsor(eventId, reason) {
+  const { data } = await backend.post(`sponsor/events/${eventId}/application/cancel`, { reason });
+  return data;
+}
+
+export async function cancelDealAsOrganizer(eventId, applicationId, reason) {
+  const { data } = await backend.post(`organizer/events/${eventId}/applications/${applicationId}/cancel`, { reason });
+  return data;
+}
+
 export async function getOrganizerHistory() {
   const { data } = await backend.get("organizer/history");
   return data;
@@ -372,6 +382,11 @@ export async function markNotificationRead(id) {
 export async function markAllNotificationsRead() {
   const { data } = await backend.post("notifications/read-all");
   return data;
+}
+
+export async function getAttachmentLink(messageId) {
+  const { data } = await backend.get(`chat/messages/${messageId}/attachment`);
+  return data.url;
 }
 
 export async function getConversations() {

@@ -71,6 +71,9 @@ export default function RegisterPage() {
         <PasswordInput label="Password" name="password" autoComplete="new-password" minLength={8} hint="At least 8 characters." required />
         {error ? <p role="alert" className="rounded-xl bg-bad-soft px-3.5 py-2.5 text-sm text-bad">{error}</p> : null}
         <Button type="submit" size="lg" className="w-full" loading={submitting}>Create account</Button>
+        <p className="text-center text-sm text-ink-faint">
+          By creating an account you agree to our <Link to="/terms" className="underline hover:text-ink">Terms</Link> and <Link to="/privacy" className="underline hover:text-ink">Privacy Policy</Link>.
+        </p>
       </form>
     </AuthLayout>
   );

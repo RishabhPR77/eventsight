@@ -27,6 +27,7 @@ const messageSchema=new mongoose.Schema({
     },
     attachment:{
         url:{type:String},
+        publicId:{type:String},
         name:{type:String},
         type:{type:String},
         size:{type:Number}

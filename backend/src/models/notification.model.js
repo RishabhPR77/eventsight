@@ -10,7 +10,7 @@ const notificationSchema=new mongoose.Schema({
     },
     type:{
         type:String,
-        enum:["message","offer","counter","accepted","rejected","withdrawn","confirm","feedback","event"],
+        enum:["message","offer","counter","accepted","rejected","withdrawn","cancelled","confirm","feedback","event"],
         required:true
     },
     title:{

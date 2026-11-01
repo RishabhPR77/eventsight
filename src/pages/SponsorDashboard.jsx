@@ -1,12 +1,13 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Compass, Search, Store } from "lucide-react";
 import BrandForm from "@/components/brand/BrandForm";
 import EventCard, { EventGridSkeleton } from "@/components/events/EventCard";
 import Button from "@/components/ui/Button";
-import { Card, EmptyState, ErrorState, PageHeader, Tabs } from "@/components/ui/Primitives";
+import { Card, EmptyState, ErrorState, LoadMore, PageHeader, Tabs } from "@/components/ui/Primitives";
+import { useDebouncedValue, usePagedList } from "@/hooks/usePagedList";
 import { useResource } from "@/hooks/useResource";
-import { getMyApplications, getSponsorCompletedEvents, getSponsorEvents, getSponsorProfile } from "@/lib/api";
+import { fetchCities, fetchEventCategories, getMyApplications, getSponsorCompletedEvents, getSponsorEvents, getSponsorProfile } from "@/lib/api";
 import { titleCase } from "@/lib/utils";
 
 const WHEN = [
@@ -35,23 +36,21 @@ export default function SponsorDashboard() {
 
   const profile = useResource(() => getSponsorProfile().then((res) => res.data));
   const deals = useResource(() => getMyApplications().then((res) => res.data));
-  const events = useResource(
-    () => (when === "upcoming" ? getSponsorEvents({ page: 1, limit: 50 }) : getSponsorCompletedEvents({ page: 1, limit: 50 })).then((res) => res.data.events),
-    [when]
+  const filterOptions = useResource(() => Promise.all([fetchCities(), fetchEventCategories()]));
+  const [cities, categories] = filterOptions.data || [[], []];
+
+  const term = useDebouncedValue(search.trim());
+  const filtering = Boolean(term || city || category);
+  const events = usePagedList(
+    (paging) => (when === "upcoming" ? getSponsorEvents : getSponsorCompletedEvents)({
+      ...paging,
+      search: term || undefined,
+      location: city || undefined,
+      category: category || undefined,
+    }).then((res) => res.data),
+    [when, term, city, category]
   );
-
-  const list = useMemo(() => events.data || [], [events.data]);
-  const cities = useMemo(() => [...new Set(list.map((event) => event.location))].sort(), [list]);
-  const categories = useMemo(() => [...new Set(list.map((event) => event.eventCategory?.name).filter(Boolean))].sort(), [list]);
-
-  const shown = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return list.filter((event) => (
-      (!city || event.location === city)
-      && (!category || event.eventCategory?.name === category)
-      && (!term || event.eventName.toLowerCase().includes(term) || event.location.toLowerCase().includes(term))
-    ));
-  }, [list, search, city, category]);
+  const shown = events.items;
 
   const toConfirm = (deals.data || []).filter((item) => (
     (item.status === "accepted" && item.event?.status === "completed" && !item.sponsorConfirmedAt)
@@ -89,22 +88,22 @@ export default function SponsorDashboard() {
         </div>
         <select aria-label="City" value={city} onChange={(e) => setCity(e.target.value)} className="field-control w-auto flex-1 sm:flex-none">
           <option value="">All cities</option>
-          {cities.map((item) => <option key={item}>{item}</option>)}
+          {cities.map((item) => <option key={item._id}>{item.name}</option>)}
         </select>
         <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className="field-control w-auto flex-1 sm:flex-none">
           <option value="">All categories</option>
-          {categories.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
+          {categories.map((item) => <option key={item._id} value={item._id}>{titleCase(item.name)}</option>)}
         </select>
       </div>
 
       {events.loading ? <EventGridSkeleton /> : null}
-      {events.error ? <Card><ErrorState error={events.error} onRetry={events.reload} /></Card> : null}
+      {events.error && shown.length === 0 ? <Card><ErrorState error={events.error} onRetry={events.reload} /></Card> : null}
       {!events.loading && !events.error && shown.length === 0 ? (
         <Card>
-          {list.length === 0 ? (
-            <EmptyState icon={Compass} title={when === "upcoming" ? "No upcoming events yet" : "No past events yet"} description="New events appear here as organizers publish them." />
-          ) : (
+          {filtering ? (
             <EmptyState icon={Search} title="No events match" description="Try a different search or filter." action={<Button variant="secondary" onClick={clearFilters}>Clear filters</Button>} />
+          ) : (
+            <EmptyState icon={Compass} title={when === "upcoming" ? "No upcoming events yet" : "No past events yet"} description="New events appear here as organizers publish them." />
           )}
         </Card>
       ) : null}
@@ -113,6 +112,7 @@ export default function SponsorDashboard() {
           {shown.map((event) => <EventCard key={event._id} event={event} to={`/sponsor/event/${event._id}`} />)}
         </div>
       ) : null}
+      <LoadMore list={events} />
 
       <BrandForm
         open={creatingProfile}

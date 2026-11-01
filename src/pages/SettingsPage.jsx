@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import Button from "@/components/ui/Button";
-import { Input, PasswordInput } from "@/components/ui/Field";
+import { Input, PasswordInput, Toggle } from "@/components/ui/Field";
 import { Card, PageHeader } from "@/components/ui/Primitives";
 import { useAuth } from "@/context/AuthContext";
 import { changePassword, deleteAccount, updateProfile } from "@/lib/api";
@@ -56,6 +56,36 @@ function ProfileSection() {
         <Input label="Email" name="email" type="email" autoComplete="email" defaultValue={user?.email} required />
         <Button type="submit" loading={saving}>Save changes</Button>
       </form>
+    </Section>
+  );
+}
+
+function AlertsSection() {
+  const { user, setUser } = useAuth();
+  const [saving, setSaving] = useState(false);
+
+  const handleChange = async (e) => {
+    const emailAlerts = e.target.checked;
+    setSaving(true);
+    try {
+      const res = await updateProfile({ emailAlerts });
+      setUser(res.data.user);
+      toast.success(emailAlerts ? "Email alerts are on" : "Email alerts are off");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+    setSaving(false);
+  };
+
+  return (
+    <Section title="Email alerts" description="The bell shows everything while you're here. Emails are for when you're not.">
+      <Toggle
+        label="Email me when I'm away"
+        hint="Offers, messages and sponsorship updates."
+        checked={user?.emailAlerts !== false}
+        disabled={saving}
+        onChange={handleChange}
+      />
     </Section>
   );
 }
@@ -138,9 +168,13 @@ export default function SettingsPage() {
       <PageHeader title="Settings" description="Manage your account." />
       <div className="space-y-4">
         <ProfileSection />
+        <AlertsSection />
         <PasswordSection />
         <DeleteSection />
       </div>
+      <p className="mt-6 text-sm text-ink-faint">
+        <Link to="/privacy" className="hover:text-ink">Privacy Policy</Link> · <Link to="/terms" className="hover:text-ink">Terms of Use</Link>
+      </p>
     </>
   );
 }

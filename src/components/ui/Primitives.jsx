@@ -121,6 +121,17 @@ export function ErrorState({ error, onRetry }) {
   );
 }
 
+export function LoadMore({ list }) {
+  if (!list.hasMore) return null;
+  return (
+    <div className="mt-6 flex justify-center">
+      <Button variant="secondary" loading={list.loadingMore} onClick={list.loadMore}>
+        {list.error ? "Try again" : "Load more"}
+      </Button>
+    </div>
+  );
+}
+
 export function Skeleton({ className = "" }) {
   return <div className={cn("animate-pulse rounded-xl bg-sand", className)} />;
 }

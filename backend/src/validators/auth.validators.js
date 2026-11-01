@@ -42,7 +42,8 @@ const changePasswordSchema = z.object({
 
 const updateProfileSchema = z.object({
     username: username.optional(),
-    email: email.optional()
+    email: email.optional(),
+    emailAlerts: z.boolean().optional()
 });
 
 module.exports = {

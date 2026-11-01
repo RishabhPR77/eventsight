@@ -173,10 +173,8 @@ const getOrganizerEvents = asyncHandler(async (req, res) => {
     }
 
     if (req.query.search) {
-        filter.eventName = {
-            $regex: escapeRegex(req.query.search),
-            $options: "i"
-        }
+        const term = { $regex: escapeRegex(req.query.search), $options: "i" }
+        filter.$or = [{ eventName: term }, { location: term }]
     }
 
     if (req.query.category) {
@@ -259,6 +257,13 @@ const getOrganizerEvents = asyncHandler(async (req, res) => {
     const total = result[0]?.totalCount[0]?.count || 0;
     const pastEventsOrganized = result[0]?.pastEventsCount[0]?.count || 0
 
+    // Counted apart from the filters, so the dashboard totals don't change with a search
+    const mine = { organizer: req.user._id, isDeleted: false }
+    const [upcomingCount, completedCount] = await Promise.all([
+        Organizer.countDocuments({ ...mine, date: { $gte: eventCutoff() } }),
+        Organizer.countDocuments({ ...mine, date: { $lt: eventCutoff() } })
+    ])
+
     return res.status(200).json(
 
         new ApiResponse(
@@ -266,6 +271,7 @@ const getOrganizerEvents = asyncHandler(async (req, res) => {
             {
                 events,
                 pastEventsOrganized: pastEventsOrganized,
+                summary: { upcoming: upcomingCount, completed: completedCount },
                 pagination: {
                     total,
                     page,

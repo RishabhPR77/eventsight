@@ -140,7 +140,7 @@ const deleteCity = asyncHandler(async (req, res) => {
 
 const getAllUsers = asyncHandler(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
-    const limit = Math.min(parseInt(req.query.limit) || 20, 10);
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
     const skip = (page - 1) * limit;
 
     const filter = {};

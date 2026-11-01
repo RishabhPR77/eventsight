@@ -226,12 +226,15 @@ A Node.js + Express REST API that manages all application data, user authenticat
 - Rate a sponsor's activation when confirming, which feeds that brand's future predictions
 - Counter-offer with sponsors until one side accepts the other's latest amount
 - See past events, sponsors, money raised and ratings on the History page
+- Cancel an accepted deal, with a reason, until both sides have confirmed it
 
 **Sponsor Domain**
 - Browse events and apply for sponsorship (one application per upcoming event, with an offered amount and an optional message)
 - Track application status from the dashboard
 - View deal analysis powered by the ML service
 - Access AI-generated negotiation points and cold email drafts
+- Reuse a saved analysis for 7 days, so repeat views spend no Groq quota; any change to the event or brand gets a fresh one
+- Cancel an accepted deal, with a reason, until both sides have confirmed it
 
 **Real-time Chat** (Socket.io)
 - Room-based messaging between sponsors and organizers scoped to a specific event
@@ -242,10 +245,12 @@ A Node.js + Express REST API that manages all application data, user authenticat
 **Notifications**
 - A bell for both sides, updated live over the socket, covering offers, counter-offers, decisions, messages, confirmations and feedback
 - Global notification delivery to the recipient's personal room
+- Email alerts for people who aren't on the site, with an off switch in Settings; a busy chat sends one email until it's read
 - Persistent message history in MongoDB
 
 **Automated Jobs** (node-cron)
 - Runs every minute to auto-expire events past their date (status → `completed`, `isExpired: true`)
+- Runs every hour to resolve stuck deals: if one side confirmed and the other is silent for 7 days the deal is confirmed automatically, and if neither side confirms within 30 days of the event it's closed
 
 **Admin**
 - Manage event categories, cities, sponsor brand types
@@ -253,7 +258,7 @@ A Node.js + Express REST API that manages all application data, user authenticat
 
 ### Database Models
 
-`User` · `Organizer` (events) · `Sponser` (sponsor profiles) · `SponsorApplication` (apply, accept and reject are built; the schema's negotiation and withdrawal fields are not used yet) · `Conversation` · `Message` · `OTP` · `EventCategory` · `EventFeedBack` · `City` · `SponsorBrandTypes` · `Admin`
+`User` · `Organizer` (events) · `Sponser` (sponsor profiles) · `SponsorApplication` · `Prediction` (saved analyses) · `Notification` · `Conversation` · `Message` · `OTP` · `EventCategory` · `EventFeedBack` · `City` · `SponsorBrandTypes` · `Admin`
 
 ---
 

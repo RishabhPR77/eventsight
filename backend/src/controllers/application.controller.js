@@ -535,6 +535,66 @@ const withdrawApplication = asyncHandler(async (req, res) => {
     )
 })
 
+const cancelDeal = async ({ application, event, by, byName, reason }) => {
+    if (application.status !== "accepted") {
+        throw new ApiError(409, "Only an accepted sponsorship can be cancelled")
+    }
+    if (application.sponsorConfirmedAt && application.organizerConfirmedAt) {
+        throw new ApiError(409, "This sponsorship was already confirmed by both sides")
+    }
+
+    application.status = "cancelled"
+    application.cancelledBy = by
+    application.cancelReason = reason
+    application.cancelledAt = new Date()
+    await application.save()
+
+    await dealUpdate(event, application.sponsor, by === "sponsor" ? application.sponsor : event.organizer, by, `${byName} cancelled the sponsorship: ${reason}`)
+    await notify({
+        user: by === "sponsor" ? event.organizer : application.sponsor,
+        type: "cancelled",
+        title: `${byName} cancelled the sponsorship`,
+        body: `${event.eventName}: ${reason}`,
+        link: by === "sponsor" ? organizerLink(event._id) : sponsorLink(event._id)
+    })
+}
+
+const cancelAsSponsor = asyncHandler(async (req, res) => {
+
+    const event = await requireEvent(req.params.id)
+    const application = await requireMyApplication(req.user._id, event._id)
+
+    await cancelDeal({
+        application,
+        event,
+        by: "sponsor",
+        byName: await brandNameOf(req.user._id),
+        reason: req.body.reason
+    })
+
+    return res.status(200).json(
+        new ApiResponse(200, application, "Sponsorship cancelled")
+    )
+})
+
+const cancelAsOrganizer = asyncHandler(async (req, res) => {
+
+    const event = await requireOwnEvent(req.params.eventId, req.user._id)
+    const application = await requireEventApplication(req.params.applicationId, event._id)
+
+    await cancelDeal({
+        application,
+        event,
+        by: "organizer",
+        byName: req.user.username,
+        reason: req.body.reason
+    })
+
+    return res.status(200).json(
+        new ApiResponse(200, application, "Sponsorship cancelled")
+    )
+})
+
 const notifyFeedbackOpen = (application, event) => notify({
     user: application.sponsor,
     type: "feedback",
@@ -613,6 +673,8 @@ module.exports = {
     counterAsSponsor,
     acceptAsSponsor,
     withdrawApplication,
+    cancelAsSponsor,
+    cancelAsOrganizer,
     confirmAsSponsor,
     confirmAsOrganizer
 }

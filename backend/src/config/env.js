@@ -23,6 +23,11 @@ const MIN_SECRET_LENGTH = 32
 
 // Stop at boot with a clear message instead of failing later on a live request
 const validateEnv = () => {
+    // A pasted URL often ends in "/", which browsers never send in the Origin header
+    if (process.env.CLIENT_ORIGIN) {
+        process.env.CLIENT_ORIGIN = process.env.CLIENT_ORIGIN.replace(/\/+$/, "")
+    }
+
     const isProduction = process.env.NODE_ENV === "production"
     const required = isProduction ? [...REQUIRED, ...REQUIRED_IN_PRODUCTION] : REQUIRED
 

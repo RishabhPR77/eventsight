@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { ArrowLeft, CalendarDays, Check, Inbox, MapPin, MessageCircle, MessagesSquare, Pencil, Repeat2, Trash2, X } from "lucide-react";
+import CancelDealModal from "@/components/events/CancelDealModal";
 import { EventCover } from "@/components/events/EventCard";
 import EventForm from "@/components/events/EventForm";
 import OfferHistory from "@/components/events/OfferHistory";
@@ -14,6 +15,7 @@ import { Avatar, Badge, Card, EmptyState, ErrorState, PageSpinner, StatusBadge, 
 import { useAuth } from "@/context/AuthContext";
 import { useResource } from "@/hooks/useResource";
 import {
+  cancelDealAsOrganizer,
   confirmSponsorshipAsOrganizer,
   counterAsOrganizer,
   deleteEvent,
@@ -69,7 +71,23 @@ function ConfirmDealModal({ application, eventId, onClose, onDone }) {
   );
 }
 
-function ApplicationRow({ application, eventDone, deciding, onDecide, onCounter, onConfirm, onChat }) {
+const CANCELLED_BY = { organizer: "You", sponsor: "The sponsor" };
+
+const cancelledNote = (application) => (
+  application.cancelledBy === "system"
+    ? application.cancelReason
+    : `${CANCELLED_BY[application.cancelledBy]} cancelled this sponsorship: ${application.cancelReason}`
+);
+
+const confirmationNote = (application) => {
+  if (application.autoConfirmed) return "Confirmed automatically after 7 days without a reply.";
+  if (application.organizerConfirmedAt && application.sponsorConfirmedAt) return "Confirmed by both sides.";
+  if (application.organizerConfirmedAt) return "You confirmed. If the sponsor doesn't reply within 7 days, it's confirmed automatically.";
+  if (application.sponsorConfirmedAt) return "The sponsor confirmed. If you don't reply within 7 days, it's confirmed automatically.";
+  return "Waiting for both sides to confirm.";
+};
+
+function ApplicationRow({ application, eventDone, deciding, onDecide, onCounter, onConfirm, onCancel, onChat }) {
   const offer = application.negotiations?.at(-1);
   const open = ["pending", "negotiating"].includes(application.status) && !eventDone;
   const myTurn = open && offer?.from === "sponsor";
@@ -117,14 +135,16 @@ function ApplicationRow({ application, eventDone, deciding, onDecide, onCounter,
           {application.status === "accepted" && eventDone && !application.organizerConfirmedAt ? (
             <Button size="sm" onClick={() => onConfirm(application)}>Confirm sponsorship</Button>
           ) : null}
+          {application.status === "accepted" && !bothConfirmed ? (
+            <Button variant="danger-soft" size="sm" onClick={() => onCancel(application)}>Cancel deal</Button>
+          ) : null}
         </div>
       </div>
       {application.status === "accepted" && eventDone ? (
-        <p className="mt-3 text-sm text-ink-soft sm:pl-14">
-          {bothConfirmed
-            ? "Confirmed by both sides."
-            : application.organizerConfirmedAt ? "You confirmed. Waiting for the sponsor." : application.sponsorConfirmedAt ? "The sponsor confirmed. It's your turn." : "Waiting for both sides to confirm."}
-        </p>
+        <p className="mt-3 text-sm text-ink-soft sm:pl-14">{confirmationNote(application)}</p>
+      ) : null}
+      {application.status === "cancelled" ? (
+        <p className="mt-3 text-sm text-ink-soft sm:pl-14">{cancelledNote(application)}</p>
       ) : null}
     </li>
   );
@@ -140,6 +160,7 @@ export default function OrganizerEventPage() {
   const [decidingId, setDecidingId] = useState(null);
   const [confirming, setConfirming] = useState(null);
   const [countering, setCountering] = useState(null);
+  const [cancelling, setCancelling] = useState(null);
 
   const event = useResource(() => getOrganizerEventById(id).then((res) => res.data), [id]);
   const applications = useResource(() => getEventApplications(id).then((res) => res.data), [id]);
@@ -183,6 +204,17 @@ export default function OrganizerEventPage() {
       await counterAsOrganizer(id, countering._id, offer);
       toast.success("Counter-offer sent");
       setCountering(null);
+      applications.reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  const handleCancel = async (reason) => {
+    try {
+      await cancelDealAsOrganizer(id, cancelling._id, reason);
+      toast.success("Sponsorship cancelled");
+      setCancelling(null);
       applications.reload();
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -288,6 +320,7 @@ export default function OrganizerEventPage() {
                     onDecide={handleDecide}
                     onCounter={setCountering}
                     onConfirm={setConfirming}
+                    onCancel={setCancelling}
                     onChat={openChat}
                   />
                 ))}
@@ -345,6 +378,8 @@ export default function OrganizerEventPage() {
         onClose={() => setCountering(null)}
         onSubmit={handleCounter}
       />
+
+      <CancelDealModal open={Boolean(cancelling)} onClose={() => setCancelling(null)} onSubmit={handleCancel} />
     </>
   );
 }

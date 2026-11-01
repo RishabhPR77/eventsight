@@ -8,6 +8,8 @@ const {postMessage} = require('../utility/chatService');
 const {setIo} = require('../utility/notifier');
 
 const MAX_MESSAGE_LENGTH = 2000;
+const MESSAGE_LIMIT = 20;
+const MESSAGE_WINDOW_MS = 10 * 1000;
 
 module.exports = (io) => {
   setIo(io);
@@ -35,6 +37,17 @@ module.exports = (io) => {
     // Personal room for notifications
     socket.join(userId);
 
+    let windowStart = 0;
+    let sentInWindow = 0;
+    const isFlooding = () => {
+      if (Date.now() - windowStart > MESSAGE_WINDOW_MS) {
+        windowStart = Date.now();
+        sentInWindow = 0;
+      }
+      sentInWindow += 1;
+      return sentInWindow > MESSAGE_LIMIT;
+    };
+
     // Room join karo (conversationId ke basis pe), sirf participants ke liye
     socket.on('join_room', async (conversationId) => {
       try {
@@ -60,6 +73,8 @@ module.exports = (io) => {
     // Message bhejo
     socket.on('send_message', async (data) => {
       try {
+        if (isFlooding()) return;
+
         const { conversationId, text } = data || {};
         if (typeof text !== 'string' || !text.trim() || text.length > MAX_MESSAGE_LENGTH) return;
 

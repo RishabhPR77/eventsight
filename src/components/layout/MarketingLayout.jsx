@@ -44,6 +44,8 @@ export default function MarketingLayout({ signUpTo, children }) {
           <nav aria-label="Footer" className="flex flex-wrap gap-4">
             {ROLE_LINKS.map((item) => <Link key={item.to} to={item.to} className="hover:text-ink">{item.label}</Link>)}
             <Link to="/login" className="hover:text-ink">Sign in</Link>
+            <Link to="/privacy" className="hover:text-ink">Privacy</Link>
+            <Link to="/terms" className="hover:text-ink">Terms</Link>
           </nav>
         </div>
       </footer>

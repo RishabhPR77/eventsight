@@ -118,7 +118,7 @@ export default function SponsorshipsPage() {
 
   const groups = useMemo(() => {
     const all = data || [];
-    const closed = (item) => ["rejected", "withdrawn"].includes(item.status);
+    const closed = (item) => ["rejected", "withdrawn", "cancelled"].includes(item.status);
     return { active: all.filter((item) => !closed(item)), closed: all.filter(closed) };
   }, [data]);
 
@@ -145,7 +145,7 @@ export default function SponsorshipsPage() {
           <EmptyState
             icon={Handshake}
             title={tab === "active" ? "No sponsorships yet" : "Nothing closed yet"}
-            description={tab === "active" ? "Find an event you like and send your first offer." : "Rejected and withdrawn offers will appear here."}
+            description={tab === "active" ? "Find an event you like and send your first offer." : "Rejected, withdrawn and cancelled offers will appear here."}
             action={tab === "active" ? <Button to="/">Discover events</Button> : null}
           />
         ) : null}

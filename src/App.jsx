@@ -26,6 +26,7 @@ const SponsorWisePage = lazy(() => import("./pages/SponsorWisePage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const MessagesPage = lazy(() => import("./pages/MessagesPage"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
+const LegalPage = lazy(() => import("./pages/LegalPage"));
 
 function Home() {
   const { user, ready } = useAuth();
@@ -88,6 +89,8 @@ export default function App() {
             <Route path="/reset-password" element={<ResetPasswordPage />} />
           </Route>
           <Route path="/verify-otp" element={<VerifyOtpPage />} />
+          <Route path="/privacy" element={<LegalPage document="privacy" />} />
+          <Route path="/terms" element={<LegalPage document="terms" />} />
 
           <Route element={<RequireAuth />}>
             <Route path="/settings" element={<SettingsPage />} />
