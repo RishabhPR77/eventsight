@@ -7,14 +7,14 @@ cloudinary.config({
 })
 
 
-const uploadOnCloudinary=async(localFilePath)=>{
+const uploadOnCloudinary=async(localFilePath,{resourceType="auto"}={})=>{
     try{
         if(!localFilePath){
             return null;
         }
         console.log(`[CLOUDINARY] Uploading file: ${localFilePath}`);
         const response=await cloudinary.uploader.upload(localFilePath,{
-            resource_type:"auto"
+            resource_type:resourceType
         });
         console.log(`[CLOUDINARY] Upload successful: ${response.secure_url}`);
         

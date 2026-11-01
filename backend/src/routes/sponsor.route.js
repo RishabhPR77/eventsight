@@ -2,7 +2,7 @@ const express=require("express");
 const { verifyJwt } = require("../middleware/auth.middleware");
 const { authorizeRole } = require("../middleware/roleCheck");
 const { createSponsorProfile, getSponsorProfile, updateSponsorProfile, deleteSponsorProfile, giveFeedback, getCompletedEvents,getMyFeedback, getEventById, getAllEvents, updateFeedback, getPrediction } = require("../controllers/sponsor.controller");
-const { applyToEvent, getMyApplications, getMyEventApplication, withdrawApplication, confirmAsSponsor } = require("../controllers/application.controller");
+const { applyToEvent, getMyApplications, getMyEventApplication, withdrawApplication, confirmAsSponsor, counterAsSponsor, acceptAsSponsor, getSponsorHistory } = require("../controllers/application.controller");
 const { validateBody } = require("../middleware/validate.middleware");
 const { feedbackSchema } = require("../validators/sponsorship.validators");
 const { uploadImage } = require("../middleware/multer.middleware");
@@ -30,9 +30,12 @@ sponsorRoute.patch("/events/:id/feedback",verifyJwt,authorizeRole("sponsor"),val
 
 // sponsorship applications
 sponsorRoute.get("/applications",verifyJwt,authorizeRole("sponsor"),getMyApplications);
+sponsorRoute.get("/history",verifyJwt,authorizeRole("sponsor"),getSponsorHistory);
 sponsorRoute.post("/events/:id/application",verifyJwt,authorizeRole("sponsor"),applyToEvent);
 sponsorRoute.get("/events/:id/application",verifyJwt,authorizeRole("sponsor"),getMyEventApplication);
 sponsorRoute.post("/events/:id/application/withdraw",verifyJwt,authorizeRole("sponsor"),withdrawApplication);
+sponsorRoute.post("/events/:id/application/counter",verifyJwt,authorizeRole("sponsor"),counterAsSponsor);
+sponsorRoute.post("/events/:id/application/accept",verifyJwt,authorizeRole("sponsor"),acceptAsSponsor);
 sponsorRoute.post("/events/:id/application/confirm",verifyJwt,authorizeRole("sponsor"),confirmAsSponsor);
 
 // predict

@@ -1,320 +1,242 @@
-import React, { useEffect, useState } from "react";
-
-import BrandPanel from "@/components/layout/BrandPanel";
-import DealPanel from "@/components/deal/DealPanel";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, ChevronDown, Sparkles } from "lucide-react";
 import ResultsPanel from "@/components/results/ResultsPanel";
-
-import { analyzeBrand, predictDeal, fetchBrandTypes, fetchEventCategories } from "@/lib/api";
-import { getErrorMessage, clampNum } from "@/lib/utils";
+import Button from "@/components/ui/Button";
+import { Input, RatingSlider, Select, Textarea, Toggle } from "@/components/ui/Field";
+import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/Primitives";
+import { analyzeBrand, fetchBrandTypes, fetchEventCategories, predictDeal } from "@/lib/api";
+import { CITY_FOCUS_LABELS, KPI_LABELS } from "@/lib/labels";
 import { ML_BRAND_CATEGORIES, ML_CITIES, ML_EVENT_TYPES } from "@/lib/mlMappings";
+import { useResource } from "@/hooks/useResource";
+import { clampNum, cn, getErrorMessage, titleCase } from "@/lib/utils";
 
-export default function SponsorWisePage() {
-  const [step, setStep] = useState(1);
+const inDays = (days) => new Date(Date.now() + days * 864e5).toISOString().slice(0, 10);
 
-  const [brandCategories, setBrandCategories] = useState(ML_BRAND_CATEGORIES);
-  const [eventTypes, setEventTypes] = useState(ML_EVENT_TYPES);
+const INITIAL_DEAL = {
+  city: "Indore",
+  event_type: "Food Festival",
+  date: inDays(45),
+  price: 0,
+  marketing_budget: 120000,
+  sponsor_amount: 45000,
+  venue_capacity: 8000,
+  organizer_reputation: 0.55,
+  lineup_quality: 0.5,
+  is_indoor: false,
+  is_festive: false,
+  social_media_reach: 15000,
+  past_events_organized: 5,
+  brand_kpi: "awareness",
+  brand_city_focus: "all_mp",
+  brand_activation_maturity: 0.55,
+  event_description: "",
+};
 
-  const KPI_OPTS = ["awareness", "hybrid", "leads", "sales"];
-  const CITY_FOCUS_OPTS = ["all_mp", "metro", "tier2", "pilgrimage"];
+function StepBar({ step }) {
+  return (
+    <ol className="mb-6 flex items-center gap-3 text-sm font-semibold">
+      {["Your brand", "The event"].map((label, index) => (
+        <li key={label} className="flex items-center gap-2">
+          {index > 0 ? <span aria-hidden="true" className="h-px w-6 bg-line sm:w-10" /> : null}
+          <span className={cn("flex h-6 w-6 items-center justify-center rounded-full text-xs", step > index ? "bg-brand text-white" : "bg-sand text-ink-faint")}>{index + 1}</span>
+          <span className={step > index ? "text-ink" : "text-ink-faint"}>{label}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
-  const [brandData, setBrandData] = useState({
-    company_name: "",
-    industry: "Beverage",
-    brand_description: "",
-  });
+function BrandStep({ brand, setBrand, categories, onDone }) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
-  const [brandResult, setBrandResult] = useState(null);
-  const [brandLoading, setBrandLoading] = useState(false);
-  const [brandErr, setBrandErr] = useState("");
-
-  const [dealData, setDealData] = useState({
-    city: "Indore",
-    event_type: "Food Festival",
-    date: "2026-10-18",
-    price: 0,
-    marketing_budget: 120000,
-    sponsor_amount: 45000,
-    venue_capacity: 8000,
-    organizer_reputation: 0.55,
-    lineup_quality: 0.5,
-    is_indoor: 0,
-    is_festive: 0,
-    social_media_reach: 15000,
-    past_events_organized: 5,
-    brand_kpi: "awareness",
-    brand_city_focus: "all_mp",
-    brand_activation_maturity: 0.55,
-    event_description: "",
-  });
-
-  const [result, setResult] = useState(null);
-  const [dealLoading, setDealLoading] = useState(false);
-  const [dealErr, setDealErr] = useState("");
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadMasterData = async () => {
-      try {
-        const [brandTypes, eventCategories] = await Promise.all([
-          fetchBrandTypes(),
-          fetchEventCategories(),
-        ]);
-
-        if (!isMounted) return;
-
-        if (Array.isArray(brandTypes) && brandTypes.length) {
-          setBrandCategories(brandTypes.map((b) => b.name || "").filter(Boolean));
-        }
-
-        if (Array.isArray(eventCategories) && eventCategories.length) {
-          setEventTypes(eventCategories.map((c) => c.name || "").filter(Boolean));
-        }
-      } catch {
-        // keep fallbacks
-      }
-    };
-
-    loadMasterData();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const onAnalyzeBrand = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setBrandErr("");
-    setBrandLoading(true);
+    setSubmitting(true);
+    setError("");
     try {
-      const data = await analyzeBrand(brandData);
-      setBrandResult(data);
-      setStep(2);
+      onDone(await analyzeBrand(brand));
     } catch (err) {
-      setBrandErr(getErrorMessage(err));
-    } finally {
-      setBrandLoading(false);
-    }
-  };
-
-  const onRun = async () => {
-    setDealErr("");
-    setResult(null);
-    setDealLoading(true);
-
-    try {
-      const payload = {
-        city: dealData.city,
-        event_type: dealData.event_type,
-        sponsor_category: brandData.industry,
-        brand_name: brandData.company_name || "Brand",
-        brand_description: brandData.brand_description || null,
-        event_description: dealData.event_description || null,
-        date: dealData.date,
-        price: clampNum(dealData.price, 0),
-        marketing_budget: clampNum(dealData.marketing_budget, 0),
-        sponsor_amount: clampNum(dealData.sponsor_amount, 0),
-        venue_capacity: Math.max(0, parseInt(dealData.venue_capacity || 0, 10)),
-        organizer_reputation: clampNum(dealData.organizer_reputation, 0.55),
-        lineup_quality: clampNum(dealData.lineup_quality, 0.5),
-        is_indoor: clampNum(dealData.is_indoor, 0),
-        is_festive: dealData.is_festive,
-        social_media_reach: Math.max(0, parseInt(dealData.social_media_reach || 0, 10)),
-        past_events_organized: Math.max(0, parseInt(dealData.past_events_organized || 0, 10)),
-        brand_kpi: dealData.brand_kpi,
-        brand_city_focus: dealData.brand_city_focus,
-        brand_activation_maturity: clampNum(dealData.brand_activation_maturity, 0.55),
-      };
-
-      const data = await predictDeal(payload);
-      setResult(data);
-    } catch (err) {
-      setDealErr(getErrorMessage(err));
-    } finally {
-      setDealLoading(false);
+      setError(getErrorMessage(err));
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="space-y-8 animate-fade-up">
-      {step === 1 ? (
-        <>
-          <section className="hero-panel" style={{
-            background: "linear-gradient(135deg, #6d5efc 0%, #4f46e5 100%)",
-            color: "#fff",
-            border: "none",
-            position: "relative",
-            overflow: "hidden"
-          }}>
-            {/* Subtle decorative glow */}
-            <div style={{
-              position: "absolute",
-              top: "-20%",
-              right: "-10%",
-              width: "400px",
-              height: "400px",
-              background: "radial-gradient(circle, rgba(255,255,255,0.1), transparent 70%)",
-              pointerEvents: "none"
-            }} />
+    <Card className="max-w-xl p-5 sm:p-6">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input label="Company name" value={brand.company_name} onChange={(e) => setBrand({ ...brand, company_name: e.target.value })} placeholder="Nimbu Beverages" required />
+        <Select label="Industry" value={brand.industry} onChange={(e) => setBrand({ ...brand, industry: e.target.value })}>
+          {categories.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
+        </Select>
+        <Textarea label="About the brand" optional rows={3} value={brand.brand_description} onChange={(e) => setBrand({ ...brand, brand_description: e.target.value })} placeholder="What do you sell, and who do you want to reach?" />
+        {error ? <p role="alert" className="rounded-xl bg-bad-soft px-3.5 py-2.5 text-sm text-bad">{error}</p> : null}
+        <Button type="submit" className="w-full" loading={submitting}>Continue</Button>
+      </form>
+    </Card>
+  );
+}
 
-            <div className="relative z-10">
-              <div className="section-kicker !text-white/60 mb-3">SponsorWise predictor</div>
-              <h1 className="section-title !text-white !text-[clamp(2.4rem,5vw,4.2rem)] mb-4">
-                Build the sponsor brief first, then run a cleaner prediction.
-              </h1>
-              <p className="text-white/80 text-lg leading-8 max-w-3xl font-medium">
-                Define the brand once, let the model understand the category and context, then move into the
-                deal workspace with far less noise.
-              </p>
+function EventStep({ deal, setDeal, eventTypes, onRun, running, error }) {
+  const [advanced, setAdvanced] = useState(false);
+  const set = (key) => (e) => setDeal((prev) => ({ ...prev, [key]: e.target.value }));
+  const setValue = (key) => (value) => setDeal((prev) => ({ ...prev, [key]: value }));
+  const setChecked = (key) => (e) => setDeal((prev) => ({ ...prev, [key]: e.target.checked }));
+
+  return (
+    <Card className="p-5">
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onRun();
+        }}
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <Select label="Event type" value={deal.event_type} onChange={set("event_type")}>
+            {eventTypes.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
+          </Select>
+          <Select label="City" value={deal.city} onChange={set("city")}>
+            {ML_CITIES.map((item) => <option key={item}>{item}</option>)}
+          </Select>
+        </div>
+        <Input label="Event date" type="date" value={deal.date} onChange={set("date")} required />
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Sponsorship (₹)" type="number" min="0" value={deal.sponsor_amount} onChange={set("sponsor_amount")} required />
+          <Input label="Venue capacity" type="number" min="1" value={deal.venue_capacity} onChange={set("venue_capacity")} required />
+          <Input label="Ticket price (₹)" type="number" min="0" value={deal.price} onChange={set("price")} required />
+          <Input label="Marketing (₹)" type="number" min="0" value={deal.marketing_budget} onChange={set("marketing_budget")} required />
+        </div>
+        <Textarea label="About the event" optional rows={2} value={deal.event_description} onChange={set("event_description")} placeholder="Who attends, and what's the format?" />
+        <Toggle label="During a festival" checked={deal.is_festive} onChange={setChecked("is_festive")} />
+
+        <button
+          type="button"
+          aria-expanded={advanced}
+          onClick={() => setAdvanced((v) => !v)}
+          className="flex w-full items-center justify-between rounded-lg py-1 text-sm font-semibold text-brand"
+        >
+          More options
+          <ChevronDown className={cn("h-4 w-4 transition", advanced && "rotate-180")} aria-hidden="true" />
+        </button>
+
+        {advanced ? (
+          <div className="space-y-4">
+            <Toggle label="Indoor event" checked={deal.is_indoor} onChange={setChecked("is_indoor")} />
+            <RatingSlider label="Organizer reputation" value={deal.organizer_reputation} onChange={setValue("organizer_reputation")} />
+            <RatingSlider label="Lineup quality" value={deal.lineup_quality} onChange={setValue("lineup_quality")} />
+            <RatingSlider label="Your activation experience" value={deal.brand_activation_maturity} onChange={setValue("brand_activation_maturity")} />
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Social reach" type="number" min="0" value={deal.social_media_reach} onChange={set("social_media_reach")} />
+              <Input label="Past events" type="number" min="0" value={deal.past_events_organized} onChange={set("past_events_organized")} />
             </div>
-
-            <div className="flex flex-wrap gap-4 mt-10 relative z-10">
-              <div className="px-6 py-4 rounded-3xl bg-white/10 backdrop-blur-md border border-white/10 text-white min-w-[200px]">
-                <div className="text-[10px] uppercase tracking-widest font-black opacity-60 mb-10">Flow</div>
-                <div className="text-xl font-black">2-step predictor</div>
-              </div>
-              <div className="px-6 py-4 rounded-3xl bg-white/10 backdrop-blur-md border border-white/10 text-white min-w-[200px]">
-                <div className="text-[10px] uppercase tracking-widest font-black opacity-60 mb-10">Outcome</div>
-                <div className="text-xl font-black">AI Analysis Report</div>
-              </div>
-            </div>
-          </section>
-
-          <div className="space-y-8">
-            <section className="settings-card !max-w-none">
-              <div className="space-y-2 mb-8 text-center sm:text-left">
-                <div className="section-kicker">Strategic workflow</div>
-                <h2 className="text-3xl sm:text-4xl font-black tracking-tight">A cleaner starting point</h2>
-                <p className="muted text-base max-w-3xl">
-                  The predictor works best when the brand context is set before event inputs. This keeps the deal
-                  analysis sharper and makes the later AI output much more usable.
-                </p>
-              </div>
-
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                {[
-                  { label: "01 · Brand fit", title: "Category mapping", desc: "Industry, tone, and context are captured once instead of being guessed later." },
-                  { label: "02 · Quality", title: "Less noisy inputs", desc: "Deal scoring becomes easier to trust when the brand foundation is already defined." },
-                  { label: "03 · AI output", title: "Smart recommendations", desc: "Persona and outreach guidance all improve with richer brand context." },
-                  { label: "04 · Workflow", title: "Centralized workspace", desc: "Once step 1 is done, the full report workspace opens with the brand carried through." }
-                ].map((item, i) => (
-                  <div key={i} className="p-6 rounded-3xl bg-[var(--bg-soft)] border border-[var(--line)] shadow-sm hover:shadow-md transition-shadow">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-[var(--accent)] mb-4">{item.label}</div>
-                    <div className="font-extrabold text-xl mb-2 text-[var(--text)]">{item.title}</div>
-                    <p className="text-sm font-medium text-[var(--text-soft)] leading-relaxed opacity-80">{item.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <div className="space-y-6">
-              <div className="text-center sm:text-left">
-                <div className="section-kicker">Step 1</div>
-                <h2 className="text-3xl font-black mt-2 tracking-tight">Brand workspace</h2>
-                <p className="muted text-sm mt-3 leading-relaxed">Fill the company details and generate the profile before moving to event analysis.</p>
-              </div>
-              <BrandPanel
-                step={1}
-                setStep={setStep}
-                brandData={brandData}
-                setBrandData={setBrandData}
-                brandResult={brandResult}
-                brandLoading={brandLoading}
-                brandErr={brandErr}
-                onAnalyzeBrand={onAnalyzeBrand}
-                categories={brandCategories}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <Select label="Main goal" value={deal.brand_kpi} onChange={set("brand_kpi")}>
+                {Object.entries(KPI_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+              </Select>
+              <Select label="City focus" value={deal.brand_city_focus} onChange={set("brand_city_focus")}>
+                {Object.entries(CITY_FOCUS_LABELS).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+              </Select>
             </div>
           </div>
-        </>
+        ) : null}
+
+        {error ? <p role="alert" className="rounded-xl bg-bad-soft px-3.5 py-2.5 text-sm text-bad">{error}</p> : null}
+        <Button type="submit" className="w-full" loading={running}>
+          {running ? null : <Sparkles className="h-4 w-4" aria-hidden="true" />}
+          {running ? "Predicting…" : "Run prediction"}
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+export default function SponsorWisePage() {
+  const [step, setStep] = useState(1);
+  const [brand, setBrand] = useState({ company_name: "", industry: "Beverage", brand_description: "" });
+  const [brandResult, setBrandResult] = useState(null);
+  const [deal, setDeal] = useState(INITIAL_DEAL);
+  const [result, setResult] = useState(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState("");
+  const resultsRef = useRef(null);
+
+  const { data } = useResource(() => Promise.all([fetchBrandTypes(), fetchEventCategories()]));
+  const brandCategories = data?.[0]?.length ? data[0].map((item) => item.name) : ML_BRAND_CATEGORIES;
+  const eventTypes = data?.[1]?.length ? data[1].map((item) => item.name) : ML_EVENT_TYPES;
+
+  useEffect(() => {
+    if (result) resultsRef.current?.scrollIntoView({ block: "start" });
+  }, [result]);
+
+  const run = async () => {
+    setRunning(true);
+    setError("");
+    try {
+      const prediction = await predictDeal({
+        ...deal,
+        sponsor_category: brand.industry,
+        brand_name: brand.company_name,
+        brand_description: brand.brand_description || null,
+        event_description: deal.event_description || null,
+        price: clampNum(deal.price),
+        marketing_budget: clampNum(deal.marketing_budget),
+        sponsor_amount: clampNum(deal.sponsor_amount),
+        venue_capacity: Math.max(1, parseInt(deal.venue_capacity, 10) || 1),
+        is_indoor: deal.is_indoor ? 1 : 0,
+        is_festive: deal.is_festive ? 1 : 0,
+        social_media_reach: Math.max(0, parseInt(deal.social_media_reach, 10) || 0),
+        past_events_organized: Math.max(0, parseInt(deal.past_events_organized, 10) || 0),
+      });
+      setResult({ prediction, brandAnalysis: brandResult });
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+    setRunning(false);
+  };
+
+  return (
+    <>
+      <PageHeader
+        title="Sponsorship predictor"
+        description="Try any brand and event combination, even if the event isn't listed yet."
+      />
+      <StepBar step={step} />
+
+      {step === 1 ? (
+        <BrandStep
+          brand={brand}
+          setBrand={setBrand}
+          categories={brandCategories}
+          onDone={(analysis) => {
+            setBrandResult(analysis);
+            setStep(2);
+          }}
+        />
       ) : (
         <>
-          <section className="hero-panel" style={{
-            background: "linear-gradient(135deg, #6d5efc 0%, #4f46e5 100%)",
-            color: "#fff",
-            border: "none",
-            position: "relative",
-            overflow: "hidden"
-          }}>
-             {/* Decorative glow */}
-            <div style={{
-              position: "absolute",
-              top: "-20%",
-              right: "-10%",
-              width: "400px",
-              height: "400px",
-              background: "radial-gradient(circle, rgba(255,255,255,0.1), transparent 70%)",
-              pointerEvents: "none"
-            }} />
-
-            <div className="relative z-10">
-              <div className="section-kicker !text-white/60 mb-3">Step 2 • prediction workspace</div>
-              <h1 className="section-title !text-white !text-[clamp(2rem,4vw,3.4rem)] mb-4">
-                {brandData.company_name || "Brand"} sponsorship report
-              </h1>
-              <p className="text-white/80 text-lg leading-8 max-w-3xl font-medium">
-                Tune the deal inputs on the left and use the report surface on the right for the verdict, AI explanation,
-                recommendations, and outreach draft.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-4 mt-8 relative z-10">
-               <div className="px-6 py-4 rounded-3xl bg-white/10 backdrop-blur-md border border-white/10 text-white min-w-[200px]">
-                <div className="text-[10px] uppercase tracking-widest font-black opacity-60 mb-1">Industry</div>
-                <div className="text-xl font-black">{brandData.industry || "—"}</div>
-              </div>
-              <div className="px-6 py-4 rounded-3xl bg-white/10 backdrop-blur-md border border-white/10 text-white min-w-[200px]">
-                <div className="text-[10px] uppercase tracking-widest font-black opacity-60 mb-1">Target City</div>
-                <div className="text-xl font-black">{dealData.city || "—"}</div>
-              </div>
-            </div>
-          </section>
-
-          <div className="flex flex-wrap items-center justify-between gap-4 py-2">
-            <div className="tab-row">
-              <button className="tab-pill active">Deal Workspace</button>
-              <button className="tab-pill" onClick={() => setStep(1)}>New Brand Brief</button>
-            </div>
-            <button type="button" onClick={() => setStep(1)} className="btn-secondary !rounded-2xl !py-3">
-              ← Change brand context
-            </button>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setStep(1)}>
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />Change brand
+            </Button>
+            <Badge tone="brand">{brand.company_name}</Badge>
+            <Badge>{titleCase(brand.industry)}</Badge>
           </div>
 
-          <div className="grid xl:grid-cols-[440px,minmax(0,1fr)] gap-8 items-start">
-            <div className="space-y-6">
-              <div>
-                <div className="section-kicker">Input parameters</div>
-                <h2 className="text-2xl font-black mt-2 tracking-tight">Event context</h2>
-              </div>
-              <DealPanel
-                step={2}
-                dealData={dealData}
-                setDealData={setDealData}
-                onRun={onRun}
-                loading={dealLoading}
-                error={dealErr}
-                showAdvanced={showAdvanced}
-                setShowAdvanced={setShowAdvanced}
-                CITIES={ML_CITIES}
-                EVENT_TYPES={eventTypes}
-                KPI_OPTS={KPI_OPTS}
-                CITY_FOCUS_OPTS={CITY_FOCUS_OPTS}
-              />
-            </div>
-
-            <div className="space-y-6 min-w-0">
-              <div>
-                <div className="section-kicker">Intelligent analysis</div>
-                <h2 className="text-2xl font-black mt-2 tracking-tight">Prediction report</h2>
-                <p className="muted text-sm mt-3 leading-relaxed">
-                  Results appear here after model execution. Data is compared against your brand brief for high-precision feasibility scoring.
-                </p>
-              </div>
-              <ResultsPanel brandCategory={brandData.industry} dealData={dealData} result={result} />
+          <div className="grid items-start gap-6 xl:grid-cols-[400px_minmax(0,1fr)]">
+            <EventStep deal={deal} setDeal={setDeal} eventTypes={eventTypes} onRun={run} running={running} error={error} />
+            <div ref={resultsRef} className="min-w-0 scroll-mt-20">
+              {result ? (
+                <ResultsPanel compact result={result} brandCategory={brand.industry} eventType={deal.event_type} city={deal.city} />
+              ) : (
+                <Card>
+                  <EmptyState icon={Sparkles} title="Your result will appear here" description="Fill in the event details and run the prediction." />
+                </Card>
+              )}
             </div>
           </div>
         </>
       )}
-    </div>
+    </>
   );
 }

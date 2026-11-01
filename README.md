@@ -224,6 +224,8 @@ A Node.js + Express REST API that manages all application data, user authenticat
 - View ML-powered analysis results for their events
 - Receive post-event feedback that feeds back into reputation scores; feedback opens only after the sponsorship is accepted, the event ends, and both sides confirm it happened
 - Rate a sponsor's activation when confirming, which feeds that brand's future predictions
+- Counter-offer with sponsors until one side accepts the other's latest amount
+- See past events, sponsors, money raised and ratings on the History page
 
 **Sponsor Domain**
 - Browse events and apply for sponsorship (one application per upcoming event, with an offered amount and an optional message)
@@ -234,6 +236,11 @@ A Node.js + Express REST API that manages all application data, user authenticat
 **Real-time Chat** (Socket.io)
 - Room-based messaging between sponsors and organizers scoped to a specific event
 - Sockets and chat routes authenticate with the access-token cookie; only a conversation's two participants can read or send
+- Inbox with unread counts, typing indicator, read receipts and image or PDF attachments (5 MB)
+- The live offer shows inside the chat, and every offer and decision is recorded in the conversation
+
+**Notifications**
+- A bell for both sides, updated live over the socket, covering offers, counter-offers, decisions, messages, confirmations and feedback
 - Global notification delivery to the recipient's personal room
 - Persistent message history in MongoDB
 

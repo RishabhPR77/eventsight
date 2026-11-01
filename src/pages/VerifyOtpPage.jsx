@@ -1,74 +1,68 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import AppShell from "@/components/layout/AppShell";
+import toast from "react-hot-toast";
+import AuthLayout from "@/components/layout/AuthLayout";
+import Button from "@/components/ui/Button";
+import { Input } from "@/components/ui/Field";
+import OtpInput from "@/components/ui/OtpInput";
+import { useAuth } from "@/context/AuthContext";
 import { resendOtp, verifyOtp } from "@/lib/api";
 import { getErrorMessage } from "@/lib/utils";
-import toast from "react-hot-toast";
 
 export default function VerifyOtpPage() {
+  const { user, setUser } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-  const [loading, setLoading] = useState(false);
+  const { state } = useLocation();
+  const [email, setEmail] = useState(state?.email || "");
+  const [otp, setOtp] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
-  const emailPrefill = location.state?.email || "";
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    const form = new FormData(e.currentTarget);
-    const payload = {
-      email: String(form.get("email") || "").trim(),
-      otp: String(form.get("otp") || "").trim(),
-    };
+    setSubmitting(true);
+    setError("");
     try {
-      await verifyOtp(payload);
-      toast.success("Email verified successfully");
-      navigate("/");
+      await verifyOtp({ email: email.trim(), otp });
+      toast.success("Email verified");
+      if (user) setUser({ ...user, email: email.trim(), isVerified: true });
+      navigate(user ? "/settings" : "/login");
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      setError(getErrorMessage(err));
+      setOtp("");
+      setSubmitting(false);
     }
-    setLoading(false);
   };
 
   const handleResend = async () => {
     setResending(true);
+    setError("");
     try {
-      await resendOtp({ email: emailPrefill });
-      toast.success("OTP resent");
+      await resendOtp({ email: email.trim() });
+      toast.success("If that email needs verifying, a new code is on its way");
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      setError(getErrorMessage(err));
     }
     setResending(false);
   };
 
   return (
-    <AppShell user={null}>
-      <div className="min-h-[calc(100vh-140px)] flex items-center justify-center">
-        <div className="hero-panel w-full max-w-lg">
-          <div className="section-kicker mb-3">Email verification</div>
-          <h1 className="section-title mb-2">Verify your account</h1>
-          <p className="section-subtitle mb-8">Enter the OTP sent to your email to continue.</p>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="field-label">Email</label>
-              <input name="email" defaultValue={emailPrefill} className="input-field" type="email" required />
-            </div>
-            <div>
-              <label className="field-label">OTP</label>
-              <input name="otp" className="input-field" required placeholder="6-digit code" />
-            </div>
-            <button className="btn-primary w-full" disabled={loading}>{loading ? "Verifying..." : "Verify OTP"}</button>
-          </form>
-          <div className="flex items-center justify-between mt-6 text-sm">
-            <Link to="/" className="font-bold text-[var(--accent)]">← Back to sign in</Link>
-            {emailPrefill ? (
-              <button type="button" onClick={handleResend} className="font-bold text-[var(--accent)]" disabled={resending}>
-                {resending ? "Resending..." : "Resend OTP"}
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </AppShell>
+    <AuthLayout
+      title="Check your email"
+      description={state?.email ? `We sent a 6-digit code to ${state.email}. It expires in 5 minutes.` : "Enter your email and the 6-digit code we sent you."}
+      footer={<Link to="/login" className="font-semibold text-brand hover:underline">Back to sign in</Link>}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {state?.email ? null : (
+          <Input label="Email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        )}
+        <OtpInput value={otp} onChange={setOtp} />
+        {error ? <p role="alert" className="rounded-xl bg-bad-soft px-3.5 py-2.5 text-sm text-bad">{error}</p> : null}
+        <Button type="submit" size="lg" className="w-full" disabled={otp.length !== 6 || !email} loading={submitting}>Verify email</Button>
+        <Button variant="ghost" className="w-full" disabled={!email} loading={resending} onClick={handleResend}>Send a new code</Button>
+        <p className="text-center text-sm text-ink-faint">Can't find it? Check your spam folder.</p>
+      </form>
+    </AuthLayout>
   );
 }

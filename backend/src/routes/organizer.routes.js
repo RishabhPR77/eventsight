@@ -3,7 +3,7 @@ const { verifyJwt } = require("../middleware/auth.middleware.js");
 const { authorizeRole } = require("../middleware/roleCheck.js");
 const { uploadImage } = require("../middleware/multer.middleware.js");
 const { eventCreate, getOrganizerEvents, getOrganizerEventsById, updateEvent, deleteEvent } = require("../controllers/organizer.controller.js");
-const { getEventApplications, updateApplicationStatus, confirmAsOrganizer } = require("../controllers/application.controller.js");
+const { getEventApplications, getOrganizerApplications, getOrganizerHistory, updateApplicationStatus, confirmAsOrganizer, counterAsOrganizer } = require("../controllers/application.controller.js");
 const { validateBody } = require("../middleware/validate.middleware.js");
 const { organizerConfirmSchema } = require("../validators/sponsorship.validators.js");
 
@@ -23,8 +23,11 @@ organizerRoute.patch("/events/:eventId",verifyJwt,authorizeRole("organizer"),upl
 organizerRoute.delete("/events/:eventId",verifyJwt,authorizeRole("organizer"),deleteEvent)  //softDelete
 
 // sponsorship applications
+organizerRoute.get("/applications",verifyJwt,authorizeRole("organizer"),getOrganizerApplications);
+organizerRoute.get("/history",verifyJwt,authorizeRole("organizer"),getOrganizerHistory);
 organizerRoute.get("/events/:eventId/applications",verifyJwt,authorizeRole("organizer"),getEventApplications);
 organizerRoute.patch("/events/:eventId/applications/:applicationId",verifyJwt,authorizeRole("organizer"),updateApplicationStatus);
+organizerRoute.post("/events/:eventId/applications/:applicationId/counter",verifyJwt,authorizeRole("organizer"),counterAsOrganizer);
 organizerRoute.post("/events/:eventId/applications/:applicationId/confirm",verifyJwt,authorizeRole("organizer"),validateBody(organizerConfirmSchema),confirmAsOrganizer);
 
 

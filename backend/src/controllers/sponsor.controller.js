@@ -14,6 +14,7 @@ const { escapeRegex } = require("../utility/escapeRegex")
 const { eventCutoff } = require("../utility/eventDates")
 const { SponsorApplication } = require("../models/sponsorApplication.model")
 const { findConfirmedDeal, hasOpenDeals, isEventFinished } = require("../utility/dealRules")
+const { notify } = require("../utility/notifier")
 
 const DEFAULT_FEEDBACK_RATINGS = Object.freeze({
     organizerReputation: 0.5,
@@ -316,6 +317,36 @@ const getAllEvents = asyncHandler(async (req, res) => {
         }, "Events fetched successfully")
     )
 })
+// Averages feedback across an organizer's finished events, starting from the defaults
+const getOrganizerRatings = async (pastEventIds) => {
+    const [stats] = await EventFeedBack.aggregate([
+        { $match: { event: { $in: pastEventIds }, isDeleted: false } },
+        {
+            $group: {
+                _id: null,
+                feedbackCount: { $sum: 1 },
+                sumOrganizerReputation: { $sum: "$organizerReputation" },
+                sumLineupQuality: { $sum: "$lineupQuality" }
+            }
+        }
+    ])
+
+    if (!stats) {
+        return {
+            totalFeedbacks: 0,
+            avgOrganizerReputation: DEFAULT_FEEDBACK_RATINGS.organizerReputation,
+            avgLineupQuality: DEFAULT_FEEDBACK_RATINGS.lineupQuality
+        }
+    }
+
+    const divisor = stats.feedbackCount + 1
+    return {
+        totalFeedbacks: stats.feedbackCount,
+        avgOrganizerReputation: (stats.sumOrganizerReputation + DEFAULT_FEEDBACK_RATINGS.organizerReputation) / divisor,
+        avgLineupQuality: (stats.sumLineupQuality + DEFAULT_FEEDBACK_RATINGS.lineupQuality) / divisor
+    }
+}
+
 const getEventById = asyncHandler(async (req, res) => {
 
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -408,8 +439,18 @@ const getEventById = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Event not found")
     }
 
+    const pastEvents = await Organizer.find({
+        organizer: event[0].organizer,
+        isDeleted: false,
+        date: { $lt: eventCutoff() }
+    }).select("_id")
+
     return res.status(200).json(
-        new ApiResponse(200, event[0], "Event fetched successfully")
+        new ApiResponse(
+            200,
+            { ...event[0], ...(await getOrganizerRatings(pastEvents.map((item) => item._id))) },
+            "Event fetched successfully"
+        )
     )
 })
 
@@ -450,6 +491,15 @@ const giveFeedback = asyncHandler(async (req, res) => {
         sponsor: req.user._id,
         organizerReputation,
         lineupQuality
+    })
+
+    const profile = await Sponsor.findOne({ sponsor: req.user._id }).select("brandName").lean()
+    await notify({
+        user: event.organizer,
+        type: "feedback",
+        title: `${profile?.brandName || "A sponsor"} left feedback`,
+        body: event.eventName,
+        link: `/organizer/event/${event._id}`
     })
 
     return res.status(201).json(
@@ -604,40 +654,8 @@ const getPrediction = asyncHandler(async (req, res) => {
 
     const eventData = event[0]
 
-    let avgOrganizerReputation = DEFAULT_FEEDBACK_RATINGS.organizerReputation
-    let avgLineupQuality       = DEFAULT_FEEDBACK_RATINGS.lineupQuality
+    const { avgOrganizerReputation, avgLineupQuality } = await getOrganizerRatings(eventData.pastEventIds)
 
-    if (eventData.pastEventIds && eventData.pastEventIds.length > 0) {
-        
-        const feedbackStats = await EventFeedBack.aggregate([
-            {
-                $match: {
-                    event: { $in: eventData.pastEventIds },
-                    isDeleted: false
-                }
-            },
-            {
-                $group: {
-                    _id: null,
-                    feedbackCount: { $sum: 1 },
-                    sumOrganizerReputation: { $sum: "$organizerReputation" },
-                    sumLineupQuality: { $sum: "$lineupQuality" }
-                }
-            }
-        ])
-
-        if (feedbackStats.length > 0) {
-            const stats = feedbackStats[0]
-            const divisor = (stats.feedbackCount || 0) + 1
-
-            avgOrganizerReputation = ((stats.sumOrganizerReputation || 0) + DEFAULT_FEEDBACK_RATINGS.organizerReputation) / divisor
-            avgLineupQuality       = ((stats.sumLineupQuality || 0) + DEFAULT_FEEDBACK_RATINGS.lineupQuality) / divisor
-        }
-        
-    }
-    
-
-  
     // Activation maturity describes the brand, so it comes from what organizers
     // rated this sponsor, not from the organizer of the event being predicted
     const activationStats = await SponsorApplication.aggregate([

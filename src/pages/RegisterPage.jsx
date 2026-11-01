@@ -1,206 +1,78 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import AppShell from "@/components/layout/AppShell";
+import { CalendarDays, Check, Store } from "lucide-react";
+import AuthLayout from "@/components/layout/AuthLayout";
+import Button from "@/components/ui/Button";
+import { Input, PasswordInput } from "@/components/ui/Field";
 import { registerOrganizer, registerSponsor } from "@/lib/api";
-import { getErrorMessage } from "@/lib/utils";
-import toast from "react-hot-toast";
+import { cn, getErrorMessage } from "@/lib/utils";
 
 const ROLES = [
-  { id: "sponsor", title: "Sponsor", desc: "Discover events and run predictions." },
-  { id: "organizer", title: "Organizer", desc: "Create events and manage opportunity quality." },
+  { id: "sponsor", title: "I'm a sponsor", text: "I want to find events for my brand", icon: Store },
+  { id: "organizer", title: "I'm an organizer", text: "I want sponsors for my event", icon: CalendarDays },
 ];
 
 export default function RegisterPage() {
   const navigate = useNavigate();
   const [role, setRole] = useState("sponsor");
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setSubmitting(true);
+    setError("");
     const form = new FormData(e.currentTarget);
     const payload = {
       username: String(form.get("username") || "").trim(),
       email: String(form.get("email") || "").trim(),
-      password: String(form.get("password") || "").trim(),
+      password: String(form.get("password") || ""),
     };
     try {
-      if (role === "sponsor") await registerSponsor(payload);
-      else await registerOrganizer(payload);
+      await (role === "sponsor" ? registerSponsor(payload) : registerOrganizer(payload));
       navigate("/verify-otp", { state: { email: payload.email } });
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      setError(getErrorMessage(err));
+      setSubmitting(false);
     }
-    setLoading(false);
   };
 
   return (
-    <AppShell user={null}>
-      {/* Full-height centering wrapper */}
-      <div style={{ minHeight: "calc(100vh - 110px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <AuthLayout
+      title="Create your account"
+      description="Choose how you'll use SponsorWise."
+      footer={<>Already have an account? <Link to="/login" className="font-semibold text-brand hover:underline">Sign in</Link></>}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <fieldset className="grid grid-cols-2 gap-3">
+          <legend className="sr-only">Account type</legend>
+          {ROLES.map(({ id, title, text, icon: Icon }) => (
+            <label
+              key={id}
+              className={cn(
+                "relative cursor-pointer rounded-xl border p-3.5 transition focus-within:ring-2 focus-within:ring-marigold",
+                role === id ? "border-brand bg-brand-soft" : "border-line bg-white hover:border-ink-faint/50"
+              )}
+            >
+              <input type="radio" name="role" value={id} checked={role === id} onChange={() => setRole(id)} className="sr-only" />
+              <Icon className="h-5 w-5 text-brand" aria-hidden="true" />
+              <span className="mt-2 block text-sm font-semibold">{title}</span>
+              <span className="mt-0.5 block text-xs leading-snug text-ink-soft">{text}</span>
+              {role === id ? (
+                <span className="absolute right-2.5 top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-brand text-white">
+                  <Check className="h-3 w-3" aria-hidden="true" />
+                </span>
+              ) : null}
+            </label>
+          ))}
+        </fieldset>
 
-        {/* Constrained centered grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "80px", width: "100%", maxWidth: "1100px", height: "600px" }}>
-
-          {/* ─── LEFT: Role Selection Hero ─── */}
-          <div style={{
-            background: "linear-gradient(140deg, #6d5efc 0%, #4338ca 55%, #1e1b4b 100%)",
-            borderRadius: "20px",
-            padding: "44px 40px",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            color: "#fff",
-            overflow: "hidden",
-          }}>
-            <div>
-              <p style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.2em", textTransform: "uppercase", opacity: 0.6, marginBottom: "12px" }}>
-                Join SponsorWise
-              </p>
-              <h1 style={{ fontSize: "1.9rem", fontWeight: 800, lineHeight: 1.25, marginBottom: "16px", color: "#fff" }}>
-                Create a polished workspace for event sponsors and organizers.
-              </h1>
-              <p style={{ fontSize: "0.95rem", lineHeight: 1.65, opacity: 0.75, marginBottom: "32px", maxWidth: "380px" }}>
-                Pick your role, verify your email, and start using one clean product instead of scattered tools and spreadsheets.
-              </p>
-
-              {/* Role cards selection */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "16px" }}>
-                {ROLES.map((item) => {
-                  const isActive = item.id === role;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setRole(item.id)}
-                      style={{
-                        background: isActive ? "#fff" : "rgba(255,255,255,0.08)",
-                        color: isActive ? "#4338ca" : "#fff",
-                        border: "none",
-                        borderRadius: "16px",
-                        padding: "24px 18px",
-                        textAlign: "left",
-                        cursor: "pointer",
-                        transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-                        transform: isActive ? "translateY(-4px)" : "none",
-                        boxShadow: isActive ? "0 12px 30px rgba(0,0,0,0.15)" : "none",
-                        position: "relative",
-                        outline: "none",
-                      }}
-                    >
-                      {isActive && (
-                        <div style={{
-                          position: "absolute",
-                          top: "14px",
-                          right: "14px",
-                          width: "20px",
-                          height: "20px",
-                          borderRadius: "50%",
-                          background: "#4338ca",
-                          color: "#fff",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: "12px",
-                          fontWeight: 900
-                        }}>✓</div>
-                      )}
-                      <div style={{ fontWeight: 800, fontSize: "1.1rem", marginBottom: "8px" }}>{item.title}</div>
-                      <div style={{ fontSize: "0.8rem", opacity: isActive ? 0.8 : 0.65, lineHeight: 1.4 }}>{item.desc}</div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "32px", paddingTop: "24px", borderTop: "1px solid rgba(255,255,255,0.15)" }}>
-              {[["Fast", "Verification"], ["Secure", "Access"], ["Free", "Trial"]].map(([val, label]) => (
-                <div key={val}>
-                  <div style={{ fontSize: "1.25rem", fontWeight: 800 }}>{val}</div>
-                  <div style={{ fontSize: "0.7rem", opacity: 0.6, marginTop: "4px" }}>{label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ─── RIGHT: Register Form ─── */}
-          <div style={{
-            background: "var(--surface)",
-            borderRadius: "20px",
-            boxShadow: "0 4px 24px rgba(15,23,42,0.08)",
-            padding: "36px 38px",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-          }}>
-            <p style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--accent)", marginBottom: "12px" }}>
-              Create account
-            </p>
-            <h2 style={{ fontSize: "1.75rem", fontWeight: 800, color: "var(--text)", lineHeight: 1.25, marginBottom: "8px" }}>
-              Register as {role === "sponsor" ? "Sponsor" : "Organizer"}
-            </h2>
-            <p style={{ fontSize: "0.9rem", color: "var(--text-soft)", lineHeight: 1.6, marginBottom: "32px" }}>
-              We will send an OTP to verify your email.
-            </p>
-
-            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              <div>
-                <label style={{ display: "block", fontSize: "10px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-faint)", marginBottom: "5px" }}>
-                  Username
-                </label>
-                <input
-                  name="username"
-                  className="input-field"
-                  style={{ padding: "14px 16px", fontSize: "0.92rem", borderRadius: "12px" }}
-                  placeholder="choose a username"
-                  required
-                />
-              </div>
-              <div>
-                <label style={{ display: "block", fontSize: "10px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-faint)", marginBottom: "5px" }}>
-                  Email
-                </label>
-                <input
-                  name="email"
-                  type="email"
-                  className="input-field"
-                  style={{ padding: "14px 16px", fontSize: "0.92rem", borderRadius: "12px" }}
-                  placeholder="you@example.com"
-                  required
-                />
-              </div>
-              <div>
-                <label style={{ display: "block", fontSize: "10px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-faint)", marginBottom: "5px" }}>
-                  Password
-                </label>
-                <input
-                  name="password"
-                  type="password"
-                  className="input-field"
-                  style={{ padding: "14px 16px", fontSize: "0.92rem", borderRadius: "12px" }}
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn-primary"
-                style={{ width: "100%", padding: "13px", fontSize: "0.95rem", fontWeight: 700, marginTop: "8px", borderRadius: "12px" }}
-              >
-                {loading ? "Creating account…" : "Create account"}
-              </button>
-            </form>
-
-            <div style={{ marginTop: "32px", paddingTop: "20px", borderTop: "1px solid var(--line)", fontSize: "0.85rem" }}>
-              <Link to="/" style={{ fontWeight: 700, color: "var(--accent)", textDecoration: "none" }}>
-                ← Back to sign in
-              </Link>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </AppShell>
+        <Input label="Username" name="username" autoComplete="username" minLength={3} maxLength={30} required />
+        <Input label="Email" name="email" type="email" autoComplete="email" hint="We'll send a code to verify it." required />
+        <PasswordInput label="Password" name="password" autoComplete="new-password" minLength={8} hint="At least 8 characters." required />
+        {error ? <p role="alert" className="rounded-xl bg-bad-soft px-3.5 py-2.5 text-sm text-bad">{error}</p> : null}
+        <Button type="submit" size="lg" className="w-full" loading={submitting}>Create account</Button>
+      </form>
+    </AuthLayout>
   );
 }

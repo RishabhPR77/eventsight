@@ -1,256 +1,146 @@
-import React, { useState } from "react";
-import { useAuth } from "@/context/AuthContext";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { changePassword, updateProfile, deleteAccount, logout } from "@/lib/api";
-import { getErrorMessage } from "@/lib/utils";
 import toast from "react-hot-toast";
+import Button from "@/components/ui/Button";
+import { Input, PasswordInput } from "@/components/ui/Field";
+import { Card, PageHeader } from "@/components/ui/Primitives";
+import { useAuth } from "@/context/AuthContext";
+import { changePassword, deleteAccount, updateProfile } from "@/lib/api";
+import { getErrorMessage } from "@/lib/utils";
 
-function SettingsSection({ kicker, title, description, children, danger = false }) {
+function Section({ title, description, children, danger = false }) {
   return (
-    <section className={danger ? "settings-card danger-surface" : "settings-card"}>
-      <div className="space-y-2 mb-8">
-        <div className="section-kicker">{kicker}</div>
-        <h2 className="text-3xl font-black tracking-tight">{title}</h2>
-        {description && <p className="muted text-sm max-w-2xl">{description}</p>}
+    <Card surface={danger ? "border-bad/30 bg-white shadow-card" : undefined} className="p-5 sm:p-6">
+      <div className="grid gap-5 md:grid-cols-[240px_minmax(0,1fr)]">
+        <div>
+          <h2 className={danger ? "text-lg font-semibold text-bad" : "text-lg font-semibold"}>{title}</h2>
+          <p className="mt-1 text-sm text-ink-soft">{description}</p>
+        </div>
+        <div className="min-w-0">{children}</div>
       </div>
-      <div className="animate-fade-up">
-        {children}
-      </div>
-    </section>
+    </Card>
   );
 }
 
-function InlineMessage({ type = "success", children }) {
-  if (!children) return null;
-  const isErr = type === "error";
+function ProfileSection() {
+  const { user, setUser } = useAuth();
+  const navigate = useNavigate();
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    const form = new FormData(e.currentTarget);
+    try {
+      const res = await updateProfile({
+        username: String(form.get("username") || "").trim() || undefined,
+        email: String(form.get("email") || "").trim() || undefined,
+      });
+      setUser(res.data.user);
+      if (res.data.emailChanged) {
+        toast.success("Enter the code we sent to your new email");
+        navigate("/verify-otp", { state: { email: res.data.user.email } });
+        return;
+      }
+      toast.success("Profile updated");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+    setSaving(false);
+  };
+
   return (
-    <div className={`flex items-center gap-2 p-4 rounded-xl text-sm font-bold mt-4 ${
-      isErr 
-        ? "bg-red-500/10 text-red-600" 
-        : "bg-emerald-500/10 text-emerald-600"
-    }`}>
-      {children}
-    </div>
+    <Section title="Profile" description="Changing your email means verifying the new address.">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input label="Username" name="username" autoComplete="username" minLength={3} maxLength={30} defaultValue={user?.username} required />
+        <Input label="Email" name="email" type="email" autoComplete="email" defaultValue={user?.email} required />
+        <Button type="submit" loading={saving}>Save changes</Button>
+      </form>
+    </Section>
+  );
+}
+
+function PasswordSection() {
+  const { signOut } = useAuth();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    const form = new FormData(e.currentTarget);
+    const payload = Object.fromEntries(["oldPassword", "newPassword", "confirmPassword"].map((key) => [key, String(form.get(key) || "")]));
+    if (payload.newPassword !== payload.confirmPassword) {
+      setError("The two new passwords don't match.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await changePassword(payload);
+      toast.success("Password changed. Please sign in again.");
+      await signOut().catch(() => {});
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Section title="Password" description="You'll be signed out after changing it.">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <PasswordInput label="Current password" name="oldPassword" autoComplete="current-password" required />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <PasswordInput label="New password" name="newPassword" autoComplete="new-password" minLength={8} hint="At least 8 characters." required />
+          <PasswordInput label="Confirm new password" name="confirmPassword" autoComplete="new-password" required />
+        </div>
+        {error ? <p role="alert" className="rounded-xl bg-bad-soft px-3.5 py-2.5 text-sm text-bad">{error}</p> : null}
+        <Button type="submit" loading={saving}>Change password</Button>
+      </form>
+    </Section>
+  );
+}
+
+function DeleteSection() {
+  const { setUser } = useAuth();
+  const navigate = useNavigate();
+  const [typed, setTyped] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    setError("");
+    try {
+      await deleteAccount();
+      setUser(null);
+      navigate("/");
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Section danger title="Delete account" description="This can't be undone. Finish any accepted sponsorships first.">
+      <div className="space-y-3">
+        <Input label="Type DELETE to confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+        {error ? <p role="alert" className="rounded-xl bg-bad-soft px-3.5 py-2.5 text-sm text-bad">{error}</p> : null}
+        <Button variant="danger" disabled={typed !== "DELETE"} loading={deleting} onClick={handleDelete}>Delete my account</Button>
+      </div>
+    </Section>
   );
 }
 
 export default function SettingsPage() {
-  const { user, setUser, setRole } = useAuth();
-  const navigate = useNavigate();
-  const [loading, setLoading] = useState({ profile: false, password: false, delete: false });
-  const [profileError, setProfileError] = useState("");
-  const [profileSuccess, setProfileSuccess] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-  const [passwordSuccess, setPasswordSuccess] = useState("");
-  const [deleteError, setDeleteError] = useState("");
-  const [deleteConfirm, setDeleteConfirm] = useState("");
-
-  const handleUpdateProfile = async (e) => {
-    e.preventDefault();
-    setProfileError("");
-    setProfileSuccess("");
-    const form = new FormData(e.currentTarget);
-    const username = String(form.get("username") || "").trim();
-    const email = String(form.get("email") || "").trim();
-    
-    if (!username && !email) {
-      setProfileError("Please provide a username or email.");
-      return;
-    }
-
-    setLoading((prev) => ({ ...prev, profile: true }));
-    try {
-      const res = await updateProfile({ username: username || undefined, email: email || undefined });
-      if (res?.data?.emailChanged) {
-        toast.success("Enter the code sent to your new email");
-        navigate("/verify-otp", { state: { email: res.data.user.email } });
-        return;
-      }
-      setProfileSuccess("Profile updated successfully.");
-      toast.success("Profile updated");
-    } catch (err) {
-      setProfileError(getErrorMessage(err));
-    } finally {
-      setLoading((prev) => ({ ...prev, profile: false }));
-    }
-  };
-
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    setPasswordError("");
-    setPasswordSuccess("");
-    const form = new FormData(e.currentTarget);
-    const oldPassword = String(form.get("oldPassword") || "");
-    const newPassword = String(form.get("newPassword") || "");
-    const confirmPassword = String(form.get("confirmPassword") || "");
-
-    if (!oldPassword || !newPassword || !confirmPassword) {
-      setPasswordError("All password fields are required.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setPasswordError("New passwords do not match.");
-      return;
-    }
-
-    setLoading((prev) => ({ ...prev, password: true }));
-    try {
-      await changePassword({ oldPassword, newPassword, confirmPassword });
-      setPasswordSuccess("Password changed. Signing out...");
-      setTimeout(async () => {
-        await logout();
-        setUser(null);
-        setRole(null);
-      }, 2000);
-    } catch (err) {
-      setPasswordError(getErrorMessage(err));
-    } finally {
-      setLoading((prev) => ({ ...prev, password: false }));
-    }
-  };
-
-  const handleDelete = async () => {
-    setDeleteError("");
-    if (deleteConfirm !== "DELETE") {
-      setDeleteError("Please type DELETE to confirm.");
-      return;
-    }
-    setLoading((prev) => ({ ...prev, delete: true }));
-    try {
-      await deleteAccount();
-      setUser(null);
-      setRole(null);
-    } catch (err) {
-      setDeleteError(getErrorMessage(err));
-    } finally {
-      setLoading((prev) => ({ ...prev, delete: false }));
-    }
-  };
-
   return (
-    <div className="space-y-8 animate-fade-up">
-      <section className="hero-panel" style={{
-        background: "linear-gradient(135deg, #6d5efc 0%, #4f46e5 100%)",
-        color: "#fff",
-        border: "none",
-        position: "relative",
-        overflow: "hidden"
-      }}>
-        {/* Subtle decorative glow */}
-        <div style={{
-          position: "absolute",
-          top: "-20%",
-          right: "-10%",
-          width: "400px",
-          height: "400px",
-          background: "radial-gradient(circle, rgba(255,255,255,0.1), transparent 70%)",
-          pointerEvents: "none"
-        }} />
-
-        <div className="relative z-10">
-          <div className="section-kicker !text-white/60 mb-3">Account preferences</div>
-          <h1 className="section-title !text-white !text-[clamp(2.4rem,5vw,4.2rem)] mb-4">
-            Workspace Settings
-          </h1>
-          <p className="text-white/80 text-lg leading-8 max-w-2xl font-medium">
-            Manage your account's public identity, security credentials, and data privacy from one centralized dashboard.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-4 mt-8 relative z-10">
-          <div className="px-6 py-4 rounded-3xl bg-white/10 backdrop-blur-md border border-white/10 text-white min-w-[200px]">
-            <div className="text-[10px] uppercase tracking-widest font-black opacity-60 mb-1">Authenticated as</div>
-            <div className="text-xl font-black">@{user?.username}</div>
-          </div>
-          <div className="px-6 py-4 rounded-3xl bg-white/10 backdrop-blur-md border border-white/10 text-white min-w-[140px]">
-            <div className="text-[10px] uppercase tracking-widest font-black opacity-60 mb-1">Account Role</div>
-            <div className="text-xl font-black capitalize">{user?.role}</div>
-          </div>
-        </div>
-      </section>
-
-      <div className="grid gap-8">
-        <SettingsSection
-          kicker="Identity"
-          title="Update Profile"
-          description="Update your username and contact email to keep your workspace identity up to date."
-        >
-          <form onSubmit={handleUpdateProfile} className="grid md:grid-cols-2 gap-6 max-w-4xl">
-            <div>
-              <label className="field-label">Username</label>
-              <input className="input-field" name="username" defaultValue={user?.username || ""} placeholder="New username" />
-            </div>
-            <div>
-              <label className="field-label">Email address</label>
-              <input className="input-field" type="email" name="email" defaultValue={user?.email || ""} placeholder="email@example.com" />
-            </div>
-            <div className="md:col-span-2">
-              <button className="btn-primary w-full md:w-auto px-8" disabled={loading.profile}>
-                {loading.profile ? "Saving..." : "Save changes"}
-              </button>
-            </div>
-            <div className="md:col-span-2">
-              <InlineMessage type="error">{profileError}</InlineMessage>
-              <InlineMessage type="success">{profileSuccess}</InlineMessage>
-            </div>
-          </form>
-        </SettingsSection>
-
-        <SettingsSection
-          kicker="Security"
-          title="Change Password"
-          description="Regularly rotate your password to ensure your account remains secure."
-        >
-          <form onSubmit={handleChangePassword} className="grid md:grid-cols-2 gap-6 max-w-4xl">
-            <div className="md:col-span-2">
-              <label className="field-label">Current password</label>
-              <input className="input-field" type="password" name="oldPassword" placeholder="Enter current password" />
-            </div>
-            <div>
-              <label className="field-label">New password</label>
-              <input className="input-field" type="password" name="newPassword" placeholder="Minimum 6 characters" />
-            </div>
-            <div>
-              <label className="field-label">Confirm new password</label>
-              <input className="input-field" type="password" name="confirmPassword" placeholder="Repeat new password" />
-            </div>
-            <div className="md:col-span-2">
-              <button className="btn-primary w-full md:w-auto px-8" disabled={loading.password}>
-                {loading.password ? "Updating..." : "Update password"}
-              </button>
-            </div>
-            <div className="md:col-span-2">
-              <InlineMessage type="error">{passwordError}</InlineMessage>
-              <InlineMessage type="success">{passwordSuccess}</InlineMessage>
-            </div>
-          </form>
-        </SettingsSection>
-
-        <SettingsSection
-          kicker="Danger Zone"
-          title="Delete Account"
-          description="Irreversibly remove your account and all associated data from the platform."
-          danger
-        >
-          <div className="space-y-4">
-            <p className="text-sm font-bold opacity-70">
-              Type <span className="text-red-500 font-black">DELETE</span> below to confirm permanent account removal.
-            </p>
-            <div className="flex flex-col md:flex-row gap-4">
-              <input
-                className="input-field max-w-sm"
-                value={deleteConfirm}
-                onChange={(e) => setDeleteConfirm(e.target.value)}
-                placeholder="Type DELETE"
-              />
-              <button className="btn-danger md:w-auto" onClick={handleDelete} disabled={loading.delete}>
-                {loading.delete ? "Deleting..." : "Permanently Delete Account"}
-              </button>
-            </div>
-            <InlineMessage type="error">{deleteError}</InlineMessage>
-          </div>
-        </SettingsSection>
+    <>
+      <PageHeader title="Settings" description="Manage your account." />
+      <div className="space-y-4">
+        <ProfileSection />
+        <PasswordSection />
+        <DeleteSection />
       </div>
-    </div>
+    </>
   );
 }

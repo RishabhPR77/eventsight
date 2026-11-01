@@ -7,11 +7,105 @@ export const BACKEND_BASE = rawBase.endsWith("/") ? rawBase : rawBase + "/";
 // Free hosting sleeps, so a prediction can include the ML service waking up
 const ML_TIMEOUT_MS = 130000;
 
-// Axios instance for Node backend
+export const SOCKET_URL = BACKEND_BASE.replace(/\/api\/?$/, "");
+
+// Free hosting sleeps when idle and takes about a minute to wake
+const DEFAULT_TIMEOUT_MS = 70000;
+
 export const backend = axios.create({
   baseURL: BACKEND_BASE,
-  timeout: 25000,
+  timeout: DEFAULT_TIMEOUT_MS,
   withCredentials: true,
+});
+
+// Separate instance for admin (uses adminToken cookie, no user session refresh)
+export const adminApi = axios.create({
+  baseURL: BACKEND_BASE,
+  timeout: DEFAULT_TIMEOUT_MS,
+  withCredentials: true,
+});
+
+// ─────────────────────────────
+// Slow requests (server waking up)
+// ─────────────────────────────
+
+const SLOW_REQUEST_MS = 6000;
+let slowRequests = 0;
+const slowListeners = new Set();
+
+const setSlowRequests = (count) => {
+  slowRequests = count;
+  slowListeners.forEach((listener) => listener(slowRequests > 0));
+};
+
+export function subscribeSlowRequests(listener) {
+  slowListeners.add(listener);
+  return () => slowListeners.delete(listener);
+}
+
+const settleSlowTimer = (config) => {
+  if (!config) return;
+  clearTimeout(config.slowTimer);
+  if (config.markedSlow) {
+    config.markedSlow = false;
+    setSlowRequests(slowRequests - 1);
+  }
+};
+
+const trackSlowRequests = (instance) => {
+  instance.interceptors.request.use((config) => {
+    config.slowTimer = setTimeout(() => {
+      config.markedSlow = true;
+      setSlowRequests(slowRequests + 1);
+    }, SLOW_REQUEST_MS);
+    return config;
+  });
+  instance.interceptors.response.use(
+    (response) => {
+      settleSlowTimer(response.config);
+      return response;
+    },
+    (error) => {
+      settleSlowTimer(error.config);
+      return Promise.reject(error);
+    }
+  );
+};
+
+trackSlowRequests(backend);
+trackSlowRequests(adminApi);
+
+// ─────────────────────────────
+// Session refresh
+// ─────────────────────────────
+
+const NO_REFRESH_URLS = ["auth/login", "auth/refreshToken"];
+let refreshInFlight = null;
+let onSessionExpired = () => {};
+
+export function setSessionExpiredHandler(handler) {
+  onSessionExpired = handler;
+}
+
+// Access tokens are short-lived: renew once and replay the request
+backend.interceptors.response.use(undefined, async (error) => {
+  const { config, response } = error;
+  if (response?.status !== 401 || !config || config.sessionRetried || NO_REFRESH_URLS.includes(config.url)) {
+    return Promise.reject(error);
+  }
+
+  config.sessionRetried = true;
+  refreshInFlight ??= backend.post("auth/refreshToken").finally(() => {
+    refreshInFlight = null;
+  });
+
+  try {
+    await refreshInFlight;
+  } catch {
+    onSessionExpired();
+    return Promise.reject(error);
+  }
+  return backend(config);
 });
 
 // ─────────────────────────────
@@ -43,12 +137,12 @@ export async function fetchBrandTypes() {
 }
 
 export async function createEventCategory(payload) {
-  const { data } = await backend.post("admin/createCategory", payload);
+  const { data } = await adminApi.post("admin/createCategory", payload);
   return data;
 }
 
 export async function createBrandType(payload) {
-  const { data } = await backend.post("admin/createBrandType", payload);
+  const { data } = await adminApi.post("admin/createBrandType", payload);
   return data;
 }
 
@@ -58,7 +152,7 @@ export async function fetchCities() {
 }
 
 export async function createCity(payload) {
-  const { data } = await backend.post("admin/createCity", payload);
+  const { data } = await adminApi.post("admin/createCity", payload);
   return data;
 }
 
@@ -235,6 +329,89 @@ export async function withdrawApplication(eventId) {
   return data;
 }
 
+export async function getOrganizerHistory() {
+  const { data } = await backend.get("organizer/history");
+  return data;
+}
+
+export async function getSponsorHistory() {
+  const { data } = await backend.get("sponsor/history");
+  return data;
+}
+
+export async function getOrganizerApplications() {
+  const { data } = await backend.get("organizer/applications");
+  return data;
+}
+
+export async function counterAsSponsor(eventId, offer) {
+  const { data } = await backend.post(`sponsor/events/${eventId}/application/counter`, offer);
+  return data;
+}
+
+export async function counterAsOrganizer(eventId, applicationId, offer) {
+  const { data } = await backend.post(`organizer/events/${eventId}/applications/${applicationId}/counter`, offer);
+  return data;
+}
+
+export async function acceptOfferAsSponsor(eventId) {
+  const { data } = await backend.post(`sponsor/events/${eventId}/application/accept`);
+  return data;
+}
+
+export async function getNotifications() {
+  const { data } = await backend.get("notifications");
+  return data;
+}
+
+export async function markNotificationRead(id) {
+  const { data } = await backend.post(`notifications/${id}/read`);
+  return data;
+}
+
+export async function markAllNotificationsRead() {
+  const { data } = await backend.post("notifications/read-all");
+  return data;
+}
+
+export async function getConversations() {
+  const { data } = await backend.get("chat/conversations");
+  return data;
+}
+
+export async function getConversation(id) {
+  const { data } = await backend.get(`chat/conversations/${id}`);
+  return data;
+}
+
+export async function markConversationRead(id) {
+  const { data } = await backend.post(`chat/conversations/${id}/read`);
+  return data;
+}
+
+export async function sendAttachment(conversationId, file, text) {
+  const form = new FormData();
+  form.append("text", text);
+  form.append("file", file);
+  const { data } = await backend.post(`chat/conversations/${conversationId}/attachments`, form);
+  return data;
+}
+
+export async function startConversation(payload) {
+  const { data } = await backend.post("chat/conversation", payload);
+  return data;
+}
+
+export async function getConversationMessages(conversationId) {
+  const { data } = await backend.get(`chat/messages/${conversationId}`);
+  return data;
+}
+
+export async function getEventConversations(eventId) {
+  const { data } = await backend.get(`chat/event/${eventId}`);
+  return data;
+}
+
 export async function confirmSponsorship(eventId) {
   const { data } = await backend.post(`sponsor/events/${eventId}/application/confirm`);
   return data;
@@ -270,13 +447,6 @@ export async function getMyApplications() {
 // ─────────────────────────────
 // Admin routes
 // ─────────────────────────────
-
-// Separate axios instance for admin (uses adminToken cookie)
-export const adminApi = axios.create({
-  baseURL: BACKEND_BASE,
-  timeout: 25000,
-  withCredentials: true,
-});
 
 export async function adminLogin(payload) {
   const { data } = await adminApi.post("admin/login", payload);

@@ -1,5 +1,12 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import { CalendarDays, LogOut, Search, Trash2, Users } from "lucide-react";
+import Button from "@/components/ui/Button";
+import { useConfirm } from "@/components/ui/Confirm";
+import { Input, PasswordInput } from "@/components/ui/Field";
+import Logo from "@/components/ui/Logo";
+import { Avatar, Badge, Card, EmptyState, ErrorState, PageSpinner, Stat, StatusBadge, Tabs } from "@/components/ui/Primitives";
+import { useResource } from "@/hooks/useResource";
 import {
   adminLogin,
   adminLogout,
@@ -18,345 +25,308 @@ import {
   getAdminStats,
   getAdminUsers,
 } from "@/lib/api";
-import { fmtINR, getErrorMessage } from "@/lib/utils";
 import { ML_BRAND_CATEGORIES, ML_CITIES, ML_EVENT_TYPES } from "@/lib/mlMappings";
+import { fmtDate, getErrorMessage, rupees, titleCase } from "@/lib/utils";
 
-const cx = (...xs) => xs.filter(Boolean).join(" ");
-
-function StatCard({ label, value }) {
-  return (
-    <div className="stat-card">
-      <div className="field-label">{label}</div>
-      <div className="text-4xl font-black">{value}</div>
-    </div>
-  );
-}
-
-function AdminLoginView({ onSuccess }) {
-  const [loading, setLoading] = useState(false);
+function AdminLogin({ onSuccess }) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setSubmitting(true);
+    setError("");
     const form = new FormData(e.currentTarget);
     try {
-      await adminLogin({
-        username: String(form.get("username") || "").trim(),
-        password: String(form.get("password") || "").trim(),
-      });
+      await adminLogin({ username: String(form.get("username") || "").trim(), password: String(form.get("password") || "") });
       onSuccess();
-      toast.success("Admin signed in");
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      setError(getErrorMessage(err));
+      setSubmitting(false);
     }
-    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="hero-panel max-w-md w-full">
-        <div className="section-kicker mb-3">Admin portal</div>
-        <h1 className="section-title mb-2">Sign in to admin</h1>
-        <p className="section-subtitle mb-8">Manage platform users, events, and master data.</p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="field-label">Username</label>
-            <input name="username" className="input-field" required />
-          </div>
-          <div>
-            <label className="field-label">Password</label>
-            <input name="password" type="password" className="input-field" required />
-          </div>
-          <button className="btn-primary w-full" disabled={loading}>{loading ? "Signing in..." : "Sign in"}</button>
+    <div className="flex min-h-dvh items-center justify-center p-5">
+      <Card className="w-full max-w-sm p-6">
+        <Logo />
+        <h1 className="mt-6 text-2xl font-bold">Admin sign in</h1>
+        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+          <Input label="Username" name="username" autoComplete="username" required />
+          <PasswordInput label="Password" name="password" autoComplete="current-password" required />
+          {error ? <p role="alert" className="rounded-xl bg-bad-soft px-3.5 py-2.5 text-sm text-bad">{error}</p> : null}
+          <Button type="submit" className="w-full" loading={submitting}>Sign in</Button>
         </form>
-      </div>
+      </Card>
     </div>
   );
 }
 
-export default function AdminPage() {
-  const [ready, setReady] = useState(false);
-  const [tab, setTab] = useState("stats");
-  const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState(null);
-  const [users, setUsers] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [brandTypes, setBrandTypes] = useState([]);
-  const [cities, setCities] = useState([]);
-  const [userSearch, setUserSearch] = useState("");
-  const [eventSearch, setEventSearch] = useState("");
-  const [catName, setCatName] = useState("");
-  const [brandName, setBrandName] = useState("");
-  const [cityName, setCityName] = useState("");
-
-  const loadStats = async () => {
-    setLoading(true);
-    try {
-      const res = await getAdminStats();
-      setStats(res?.data || res);
-    } catch (err) {
-      if (err?.response?.status === 401) return setReady(false);
-      toast.error(getErrorMessage(err));
-    }
-    setLoading(false);
-  };
-
-  const loadUsers = async () => {
-    setLoading(true);
-    try {
-      const res = await getAdminUsers({ search: userSearch, limit: 100 });
-      setUsers(res?.data?.users || res?.data || []);
-    } catch (err) {
-      if (err?.response?.status === 401) return setReady(false);
-      toast.error(getErrorMessage(err));
-    }
-    setLoading(false);
-  };
-
-  const loadEvents = async () => {
-    setLoading(true);
-    try {
-      const res = await getAdminEvents({ search: eventSearch, limit: 100 });
-      setEvents(res?.data?.events || res?.data || []);
-    } catch (err) {
-      if (err?.response?.status === 401) return setReady(false);
-      toast.error(getErrorMessage(err));
-    }
-    setLoading(false);
-  };
-
-  const loadMasterData = async () => {
-    setLoading(true);
-    try {
-      const [cats, brands, cityRes] = await Promise.all([
-        fetchEventCategories(),
-        fetchBrandTypes(),
-        fetchCities(),
-      ]);
-      setCategories(Array.isArray(cats) ? cats : cats?.data || []);
-      setBrandTypes(Array.isArray(brands) ? brands : brands?.data || []);
-      setCities(Array.isArray(cityRes) ? cityRes : cityRes?.data || []);
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    }
-    setLoading(false);
-  };
+function Overview({ onExpired }) {
+  const { data, loading, error, reload } = useResource(() => getAdminStats().then((res) => res.data));
 
   useEffect(() => {
-    if (!ready) return;
-    if (tab === "stats") loadStats();
-    if (tab === "users") loadUsers();
-    if (tab === "events") loadEvents();
-    if (tab === "master") loadMasterData();
-  }, [ready, tab]);
+    if (error?.response?.status === 401) onExpired();
+  }, [error, onExpired]);
 
-  if (!ready) return <AdminLoginView onSuccess={() => setReady(true)} />;
+  if (loading) return <PageSpinner />;
+  if (error) return <Card><ErrorState error={error} onRetry={reload} /></Card>;
 
-  const handleLogout = async () => {
+  return (
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Stat label="Users" value={data.totalUsers} hint={`${data.recentUsers} joined in 30 days`} />
+      <Stat label="Organizers" value={data.totalOrganizers} />
+      <Stat label="Sponsors" value={data.totalSponsors} />
+      <Stat label="Event categories" value={data.totalCategories} />
+      <Stat label="Events" value={data.totalEvents} />
+      <Stat label="Upcoming events" value={data.activeEvents} />
+      <Stat label="Completed events" value={data.completedEvents} />
+      <Stat label="Brand types" value={data.totalBrandTypes} />
+    </div>
+  );
+}
+
+function SearchBox({ value, onChange, label }) {
+  return (
+    <div className="relative mb-4 max-w-sm">
+      <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" aria-hidden="true" />
+      <input type="search" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} placeholder={label} className="field-control pl-10" />
+    </div>
+  );
+}
+
+function useDebounced(value, delay = 300) {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return settled;
+}
+
+function RemoveButton({ label, onClick }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-faint transition hover:bg-bad-soft hover:text-bad"
+    >
+      <Trash2 className="h-4 w-4" />
+    </button>
+  );
+}
+
+function UsersTab() {
+  const confirm = useConfirm();
+  const [search, setSearch] = useState("");
+  const term = useDebounced(search);
+  const { data, loading, error, reload } = useResource(() => getAdminUsers({ search: term, limit: 100 }).then((res) => res.data.users), [term]);
+
+  const remove = async (user) => {
+    const yes = await confirm({
+      title: `Delete ${user.username}?`,
+      message: "Their profile and events are removed, and pending offers are closed. This can't be undone.",
+      confirmLabel: "Delete user",
+      danger: true,
+    });
+    if (!yes) return;
     try {
-      await adminLogout();
-    } catch {}
-    setReady(false);
-  };
-
-  const createItem = async (type, name) => {
-    const value = String(name || "").trim();
-    if (!value) return;
-    try {
-      if (type === "category") {
-        await createEventCategory({ name: value });
-        setCatName("");
-      }
-      if (type === "brand") {
-        await createBrandType({ name: value });
-        setBrandName("");
-      }
-      if (type === "city") {
-        await createCity({ name: value });
-        setCityName("");
-      }
-      toast.success("Created successfully");
-      loadMasterData();
+      await deleteAdminUser(user._id);
+      toast.success("User deleted");
+      reload();
     } catch (err) {
       toast.error(getErrorMessage(err));
     }
   };
 
   return (
-    <div className="shell-wrap space-y-6">
-      <section className="hero-panel">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="section-kicker mb-3">Admin dashboard</div>
-            <h1 className="section-title mb-4">Platform control center</h1>
-            <p className="section-subtitle text-lg max-w-3xl leading-8">Manage stats, users, events, and all master data in one clean workspace.</p>
-          </div>
-          <div className="flex gap-3">
-            <button className="btn-secondary" onClick={() => {
-              if (tab === "stats") loadStats();
-              if (tab === "users") loadUsers();
-              if (tab === "events") loadEvents();
-              if (tab === "master") loadMasterData();
-            }}>Refresh</button>
-            <button className="btn-danger" onClick={handleLogout}>Logout</button>
-          </div>
-        </div>
-        <div className="tab-row mt-8">
-          {[["stats", "Stats"], ["users", "Users"], ["events", "Events"], ["master", "Master data"]].map(([id, label]) => (
-            <button key={id} className={cx("tab-pill", tab === id && "active")} onClick={() => setTab(id)}>{label}</button>
+    <>
+      <SearchBox value={search} onChange={setSearch} label="Search users" />
+      <Card>
+        {error ? <ErrorState error={error} onRetry={reload} /> : null}
+        {!loading && !error && !data?.length ? <EmptyState icon={Users} title="No users found" /> : null}
+        <ul className="divide-y divide-line">
+          {(data || []).map((user) => (
+            <li key={user._id} className="flex items-center gap-3 p-4">
+              <Avatar name={user.username} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold">{user.username}</p>
+                <p className="truncate text-sm text-ink-soft">{user.email}</p>
+              </div>
+              <Badge tone={user.role === "sponsor" ? "accent" : "brand"} className="capitalize">{user.role}</Badge>
+              <RemoveButton label={`Delete ${user.username}`} onClick={() => remove(user)} />
+            </li>
           ))}
+        </ul>
+      </Card>
+    </>
+  );
+}
+
+function EventsTab() {
+  const confirm = useConfirm();
+  const [search, setSearch] = useState("");
+  const term = useDebounced(search);
+  const { data, loading, error, reload } = useResource(() => getAdminEvents({ search: term, limit: 100 }).then((res) => res.data.events), [term]);
+
+  const remove = async (event) => {
+    const yes = await confirm({
+      title: `Delete ${event.eventName}?`,
+      message: "It disappears for everyone, even if it has accepted sponsors.",
+      confirmLabel: "Delete event",
+      danger: true,
+    });
+    if (!yes) return;
+    try {
+      await deleteAdminEvent(event._id);
+      toast.success("Event deleted");
+      reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  return (
+    <>
+      <SearchBox value={search} onChange={setSearch} label="Search events" />
+      <Card>
+        {error ? <ErrorState error={error} onRetry={reload} /> : null}
+        {!loading && !error && !data?.length ? <EmptyState icon={CalendarDays} title="No events found" /> : null}
+        <ul className="divide-y divide-line">
+          {(data || []).map((event) => (
+            <li key={event._id} className="flex items-center gap-3 p-4">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold">{event.eventName}</p>
+                <p className="truncate text-sm text-ink-soft">
+                  {event.location} · {fmtDate(event.date)} · {rupees(event.ask)} · by {event.organizerInfo?.username || "unknown"}
+                </p>
+              </div>
+              <StatusBadge status={event.status} className="max-sm:hidden" />
+              <RemoveButton label={`Delete ${event.eventName}`} onClick={() => remove(event)} />
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </>
+  );
+}
+
+function MasterList({ title, description, options, items, normalize = (name) => name, onCreate, onDelete, display = (name) => name, reload }) {
+  const confirm = useConfirm();
+  const [choice, setChoice] = useState("");
+  const existing = new Set(items.map((item) => normalize(item.name)));
+  const available = options.filter((name) => !existing.has(normalize(name)));
+
+  const add = async (e) => {
+    e.preventDefault();
+    if (!choice) return;
+    try {
+      await onCreate({ name: choice });
+      setChoice("");
+      toast.success("Added");
+      reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  const remove = async (item) => {
+    const yes = await confirm({ title: `Delete ${display(item.name)}?`, message: "It won't be offered in forms any more.", confirmLabel: "Delete", danger: true });
+    if (!yes) return;
+    try {
+      await onDelete(item._id);
+      toast.success("Deleted");
+      reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  return (
+    <Card className="flex flex-col p-5">
+      <h2 className="text-lg font-semibold">{title}</h2>
+      <p className="mt-1 text-sm text-ink-soft">{description}</p>
+      <form onSubmit={add} className="mt-4 flex gap-2">
+        <select aria-label={`Add to ${title}`} value={choice} onChange={(e) => setChoice(e.target.value)} className="field-control min-w-0">
+          <option value="">{available.length ? "Choose one to add" : "All added"}</option>
+          {available.map((name) => <option key={name}>{name}</option>)}
+        </select>
+        <Button type="submit" disabled={!choice}>Add</Button>
+      </form>
+      <ul className="mt-3 max-h-80 divide-y divide-line overflow-y-auto">
+        {items.map((item) => (
+          <li key={item._id} className="flex items-center justify-between gap-2 py-1.5">
+            <span className="truncate text-sm font-medium">{display(item.name)}</span>
+            <RemoveButton label={`Delete ${display(item.name)}`} onClick={() => remove(item)} />
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+function MasterData() {
+  const { data, loading, error, reload } = useResource(() => Promise.all([fetchEventCategories(), fetchBrandTypes(), fetchCities()]));
+
+  if (loading) return <PageSpinner />;
+  if (error) return <Card><ErrorState error={error} onRetry={reload} /></Card>;
+
+  const [categories, brandTypes, cities] = data;
+  const upper = (name) => name.toUpperCase();
+
+  return (
+    <div className="grid items-start gap-4 lg:grid-cols-3">
+      <MasterList title="Event categories" description="Only types the prediction model knows." options={ML_EVENT_TYPES} items={categories} normalize={upper} display={titleCase} onCreate={createEventCategory} onDelete={deleteEventCategory} reload={reload} />
+      <MasterList title="Brand types" description="Only industries the model knows." options={ML_BRAND_CATEGORIES} items={brandTypes} normalize={upper} display={titleCase} onCreate={createBrandType} onDelete={deleteBrandType} reload={reload} />
+      <MasterList title="Cities" description="Madhya Pradesh cities the model knows." options={ML_CITIES} items={cities} onCreate={createCity} onDelete={deleteCity} reload={reload} />
+    </div>
+  );
+}
+
+const TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "users", label: "Users" },
+  { id: "events", label: "Events" },
+  { id: "master", label: "Setup data" },
+];
+
+export default function AdminPage() {
+  const [status, setStatus] = useState("checking");
+  const [tab, setTab] = useState("overview");
+
+  useEffect(() => {
+    getAdminStats()
+      .then(() => setStatus("in"))
+      .catch(() => setStatus("out"));
+  }, []);
+
+  if (status === "checking") return <PageSpinner />;
+  if (status === "out") return <AdminLogin onSuccess={() => setStatus("in")} />;
+
+  const handleSignOut = async () => {
+    await adminLogout().catch(() => {});
+    setStatus("out");
+  };
+
+  return (
+    <div className="min-h-dvh">
+      <header className="border-b border-line bg-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-3">
+            <Logo />
+            <Badge tone="accent">Admin</Badge>
+          </div>
+          <Button variant="ghost" size="sm" onClick={handleSignOut}><LogOut className="h-4 w-4" aria-hidden="true" />Sign out</Button>
         </div>
-      </section>
-
-      {tab === "stats" ? (
-        <section className="workspace-panel">
-          {loading ? <div className="soft-card text-center py-16 muted">Loading stats...</div> : stats ? (
-            <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <StatCard label="Total users" value={stats.totalUsers || 0} />
-              <StatCard label="Organizers" value={stats.totalOrganizers || 0} />
-              <StatCard label="Sponsors" value={stats.totalSponsors || 0} />
-              <StatCard label="Recent users" value={stats.recentUsers || 0} />
-              <StatCard label="Total events" value={stats.totalEvents || 0} />
-              <StatCard label="Active events" value={stats.activeEvents || 0} />
-              <StatCard label="Completed events" value={stats.completedEvents || 0} />
-              <StatCard label="Event categories" value={stats.totalCategories || 0} />
-            </div>
-          ) : <div className="soft-card text-center py-16 muted">No stats available.</div>}
-        </section>
-      ) : null}
-
-      {tab === "users" ? (
-        <section className="workspace-panel space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-3xl font-black">Users</h2>
-            <div className="flex gap-3">
-              <input value={userSearch} onChange={(e) => setUserSearch(e.target.value)} className="input-field min-w-[240px]" placeholder="Search users" />
-              <button className="btn-primary" onClick={loadUsers}>Search</button>
-            </div>
-          </div>
-          <div className="grid gap-3">
-            {users.map((user) => (
-              <div key={user._id} className="soft-card flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <div className="text-xl font-extrabold">{user.username}</div>
-                  <div className="muted">{user.email}</div>
-                  <div className="faint text-sm mt-1 uppercase tracking-[0.18em]">{user.role}</div>
-                </div>
-                <button className="btn-danger" onClick={async () => {
-                  if (!window.confirm(`Delete ${user.username}?`)) return;
-                  try { await deleteAdminUser(user._id); loadUsers(); toast.success("User deleted"); } catch (err) { toast.error(getErrorMessage(err)); }
-                }}>Delete</button>
-              </div>
-            ))}
-            {!users.length ? <div className="soft-card text-center py-12 muted">No users found.</div> : null}
-          </div>
-        </section>
-      ) : null}
-
-      {tab === "events" ? (
-        <section className="workspace-panel space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-3xl font-black">Events</h2>
-            <div className="flex gap-3">
-              <input value={eventSearch} onChange={(e) => setEventSearch(e.target.value)} className="input-field min-w-[240px]" placeholder="Search events" />
-              <button className="btn-primary" onClick={loadEvents}>Search</button>
-            </div>
-          </div>
-          <div className="grid gap-3">
-            {events.map((event) => (
-              <div key={event._id} className="soft-card flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <div className="text-xl font-extrabold">{event.eventName}</div>
-                  <div className="muted">{event.location} · ₹{fmtINR(event.ask)}</div>
-                  <div className="faint text-sm mt-1">Organizer: {event.organizerInfo?.username || "—"}</div>
-                </div>
-                <button className="btn-danger" onClick={async () => {
-                  if (!window.confirm(`Delete ${event.eventName}?`)) return;
-                  try { await deleteAdminEvent(event._id); loadEvents(); toast.success("Event deleted"); } catch (err) { toast.error(getErrorMessage(err)); }
-                }}>Delete</button>
-              </div>
-            ))}
-            {!events.length ? <div className="soft-card text-center py-12 muted">No events found.</div> : null}
-          </div>
-        </section>
-      ) : null}
-
-      {tab === "master" ? (
-        <section className="workspace-panel grid xl:grid-cols-3 gap-5">
-          <div className="surface-card">
-            <div className="field-label">Event categories</div>
-            <p className="muted text-sm mt-1">Select the exact ML-recognised event types.</p>
-            <div className="flex gap-3 mt-4 mb-5">
-              <select value={catName} onChange={(e) => setCatName(e.target.value)} className="input-field cursor-pointer">
-                <option value="" disabled>Choose an event category…</option>
-                {ML_EVENT_TYPES.map((name) => (
-                  <option key={name} value={name} disabled={categories.some((c) => c.name === name.toUpperCase())}>{
-                    categories.some((c) => c.name === name.toUpperCase()) ? `${name} — added` : name
-                  }</option>
-                ))}
-              </select>
-              <button className="btn-primary" onClick={() => createItem("category", catName)}>Add</button>
-            </div>
-            <div className="grid gap-3 max-h-[380px] overflow-auto pr-1">
-              {categories.map((cat) => (
-                <div key={cat._id} className="soft-card flex items-center justify-between gap-3">
-                  <div className="font-semibold">{cat.name}</div>
-                  <button className="btn-danger !px-4 !py-2" onClick={async () => { if (!window.confirm(`Delete ${cat.name}?`)) return; try { await deleteEventCategory(cat._id); loadMasterData(); toast.success("Deleted"); } catch (err) { toast.error(getErrorMessage(err)); } }}>Delete</button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="surface-card">
-            <div className="field-label">Brand types</div>
-            <p className="muted text-sm mt-1">Select the exact ML-recognised brand categories.</p>
-            <div className="flex gap-3 mt-4 mb-5">
-              <select value={brandName} onChange={(e) => setBrandName(e.target.value)} className="input-field cursor-pointer">
-                <option value="" disabled>Choose a brand type…</option>
-                {ML_BRAND_CATEGORIES.map((name) => (
-                  <option key={name} value={name} disabled={brandTypes.some((b) => b.name === name.toUpperCase())}>{
-                    brandTypes.some((b) => b.name === name.toUpperCase()) ? `${name} — added` : name
-                  }</option>
-                ))}
-              </select>
-              <button className="btn-primary" onClick={() => createItem("brand", brandName)}>Add</button>
-            </div>
-            <div className="grid gap-3 max-h-[380px] overflow-auto pr-1">
-              {brandTypes.map((type) => (
-                <div key={type._id} className="soft-card flex items-center justify-between gap-3">
-                  <div className="font-semibold">{type.name}</div>
-                  <button className="btn-danger !px-4 !py-2" onClick={async () => { if (!window.confirm(`Delete ${type.name}?`)) return; try { await deleteBrandType(type._id); loadMasterData(); toast.success("Deleted"); } catch (err) { toast.error(getErrorMessage(err)); } }}>Delete</button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="surface-card">
-            <div className="field-label">Cities</div>
-            <p className="muted text-sm mt-1">Select from the MP cities the ML model knows.</p>
-            <div className="flex gap-3 mt-4 mb-5">
-              <select value={cityName} onChange={(e) => setCityName(e.target.value)} className="input-field cursor-pointer">
-                <option value="" disabled>Choose a city…</option>
-                {ML_CITIES.map((name) => (
-                  <option key={name} value={name} disabled={cities.some((c) => c.name === name)}>{
-                    cities.some((c) => c.name === name) ? `${name} — added` : name
-                  }</option>
-                ))}
-              </select>
-              <button className="btn-primary" onClick={() => createItem("city", cityName)}>Add</button>
-            </div>
-            <div className="grid gap-3 max-h-[380px] overflow-auto pr-1">
-              {cities.map((city) => (
-                <div key={city._id} className="soft-card flex items-center justify-between gap-3">
-                  <div className="font-semibold">{city.name}</div>
-                  <button className="btn-danger !px-4 !py-2" onClick={async () => { if (!window.confirm(`Delete ${city.name}?`)) return; try { await deleteCity(city._id); loadMasterData(); toast.success("Deleted"); } catch (err) { toast.error(getErrorMessage(err)); } }}>Delete</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      ) : null}
+      </header>
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+        <Tabs className="mb-6" tabs={TABS} value={tab} onChange={setTab} label="Admin sections" />
+        {tab === "overview" ? <Overview onExpired={() => setStatus("out")} /> : null}
+        {tab === "users" ? <UsersTab /> : null}
+        {tab === "events" ? <EventsTab /> : null}
+        {tab === "master" ? <MasterData /> : null}
+      </main>
     </div>
   );
 }

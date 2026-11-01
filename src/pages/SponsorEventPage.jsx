@@ -1,466 +1,365 @@
-import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
+import { ArrowLeft, CalendarDays, MapPin, MessageCircle, Sparkles, Star } from "lucide-react";
+import DealProgress from "@/components/events/DealProgress";
+import { EventCover } from "@/components/events/EventCard";
+import OfferHistory from "@/components/events/OfferHistory";
+import OfferModal from "@/components/events/OfferModal";
+import Button from "@/components/ui/Button";
+import { useConfirm } from "@/components/ui/Confirm";
+import { Input, RatingSlider, Textarea } from "@/components/ui/Field";
+import Modal, { ModalBody, ModalFooter } from "@/components/ui/Modal";
+import { Badge, Card, ErrorState, PageSpinner, StatusBadge } from "@/components/ui/Primitives";
+import { useAuth } from "@/context/AuthContext";
+import { useResource } from "@/hooks/useResource";
 import {
-  getSponsorEventById,
+  acceptOfferAsSponsor,
+  applyToEvent,
+  confirmSponsorship,
+  counterAsSponsor,
+  getMyEventApplication,
   getMyEventFeedback,
-  getSponsorCompletedEvents,
-  getEventPrediction,
+  getSponsorEventById,
   getSponsorProfile,
   giveEventFeedback,
+  startConversation,
   updateEventFeedback,
-  applyToEvent,
-  getMyEventApplication,
   withdrawApplication,
-  confirmSponsorship,
 } from "@/lib/api";
-import { APPLICATION_STATUS_CLASS, fmtINR, getErrorMessage, coldEmailToText, resolveMediaUrl } from "@/lib/utils";
-import ResultsPanel from "@/components/results/ResultsPanel";
-import ChatBox from "@/components/ChatBox";
-import { useAuth } from "@/context/AuthContext";
+import { fmtDate, fmtINR, getErrorMessage, rupees, titleCase } from "@/lib/utils";
 
-const cx = (...xs) => xs.filter(Boolean).join(" ");
-const STATUS_CLASS = {
-  upcoming: "status-chip status-upcoming",
-  completed: "status-chip status-completed",
-  cancelled: "status-chip status-cancelled",
-};
-
-function Metric({ label, value }) {
+function Fact({ label, value }) {
   return (
-    <div className="soft-card">
-      <div className="field-label">{label}</div>
-      <div className="text-3xl font-black">{value ?? "—"}</div>
+    <div>
+      <dt className="text-sm text-ink-soft">{label}</dt>
+      <dd className="mt-0.5 font-display text-xl font-bold">{value}</dd>
     </div>
   );
 }
 
+function ApplyModal({ open, ask, eventId, onClose, onDone }) {
+  const [submitting, setSubmitting] = useState(false);
 
-
-function FeedbackForm({ initial, onSubmit, submitting, submitLabel }) {
-  const values = initial || {
-    organizerReputation: 0.5,
-    lineupQuality: 0.5,
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    const form = new FormData(e.currentTarget);
+    try {
+      await applyToEvent(eventId, { amount: Number(form.get("amount")), message: form.get("message") });
+      toast.success("Offer sent");
+      onDone();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+    setSubmitting(false);
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5">
-      {[
-        ["organizerReputation", "Organizer reputation"],
-        ["lineupQuality", "Lineup quality"],
-      ].map(([key, label]) => (
-        <div key={key}>
-          <div className="field-label">{label}</div>
-          <input
-            type="range"
-            name={key}
-            min="0"
-            max="1"
-            step="0.01"
-            defaultValue={values[key]}
-            className="w-full accent-[var(--accent)]"
-          />
-        </div>
-      ))}
-
-      <button className="btn-primary" disabled={submitting}>
-        {submitting ? "Saving..." : submitLabel}
-      </button>
-    </form>
+    <Modal open={open} onClose={onClose} title="Apply to sponsor" description="You can apply once to each event.">
+      <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <ModalBody className="space-y-4">
+          <Input label="Your offer (₹)" name="amount" type="number" min="1" defaultValue={ask} hint={`The organizer is asking for ${rupees(ask)}.`} required />
+          <Textarea label="Message to the organizer" name="message" optional maxLength={1000} rows={4} placeholder="What would your brand like to do at this event?" />
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" loading={submitting}>Send offer</Button>
+        </ModalFooter>
+      </form>
+    </Modal>
   );
 }
 
-function ApplyForm({ ask, onSubmit, onClose, submitting }) {
+function FeedbackModal({ existing, eventId, onClose, onDone }) {
+  const [reputation, setReputation] = useState(existing?.organizerReputation ?? 0.7);
+  const [lineup, setLineup] = useState(existing?.lineupQuality ?? 0.7);
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setSaving(true);
+    const payload = { organizerReputation: reputation, lineupQuality: lineup };
+    try {
+      await (existing ? updateEventFeedback(eventId, payload) : giveEventFeedback(eventId, payload));
+      toast.success("Thanks for your feedback");
+      onDone();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+    setSaving(false);
+  };
+
   return (
-    <div className="modal-overlay">
-      <div className="modal-card animate-fade-up">
-        <div className="modal-header">
-          <div>
-            <h3 className="text-3xl font-black">Apply for sponsorship</h3>
-            <p className="muted mt-1">You can apply once. The organizer will accept or reject your offer.</p>
-          </div>
-          <button type="button" className="btn-secondary" onClick={onClose}>Close</button>
-        </div>
+    <Modal open onClose={onClose} size="sm" title="Rate this event" description="Your rating helps other sponsors and improves future predictions.">
+      <ModalBody className="space-y-6">
+        <RatingSlider label="How was the organizer?" value={reputation} onChange={setReputation} />
+        <RatingSlider label="How good was the lineup?" value={lineup} onChange={setLineup} />
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button loading={saving} onClick={submit}>{existing ? "Update feedback" : "Submit feedback"}</Button>
+      </ModalFooter>
+    </Modal>
+  );
+}
 
-        <form onSubmit={onSubmit} className="space-y-6">
-          <div>
-            <label className="field-label">Offered amount (₹)</label>
-            <input name="amount" type="number" min="1" defaultValue={ask || ""} required className="input-field" />
-          </div>
+function DealCard({ detail, application, feedback, hasProfile, onApply, onAccept, onCounter, onWithdraw, onConfirm, onFeedback }) {
+  const eventDone = detail.status === "completed";
+  const accepted = application?.status === "accepted";
+  const open = ["pending", "negotiating"].includes(application?.status);
+  const latest = application?.negotiations?.at(-1);
+  const myTurn = open && !eventDone && latest?.from === "organizer";
+  const bothConfirmed = Boolean(application?.sponsorConfirmedAt && application?.organizerConfirmedAt);
 
-          <div>
-            <label className="field-label">Message to organizer (optional)</label>
-            <textarea name="message" rows={4} maxLength={1000} className="textarea-field" placeholder="What would your brand want from this sponsorship?" />
+  let action = null;
+  if (!application && !eventDone) {
+    action = hasProfile
+      ? <Button className="w-full" onClick={onApply}>Apply to sponsor</Button>
+      : <Button className="w-full" to="/brand">Create brand profile to apply</Button>;
+  } else if (open && !eventDone) {
+    action = (
+      <div className="space-y-2">
+        {myTurn ? (
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="secondary" onClick={onCounter}>Counter</Button>
+            <Button onClick={onAccept}>Accept</Button>
           </div>
-
-          <button type="submit" disabled={submitting} className="btn-primary w-full">
-            {submitting ? "Submitting..." : "Submit application"}
-          </button>
-        </form>
+        ) : null}
+        <Button variant="ghost" className="w-full" onClick={onWithdraw}>Withdraw offer</Button>
       </div>
-    </div>
+    );
+  } else if (accepted && eventDone && !application.sponsorConfirmedAt) {
+    action = <Button className="w-full" onClick={onConfirm}>Confirm it happened</Button>;
+  } else if (bothConfirmed) {
+    action = (
+      <Button className="w-full" variant={feedback ? "secondary" : "primary"} onClick={onFeedback}>
+        <Star className="h-4 w-4" aria-hidden="true" />{feedback ? "Update feedback" : "Leave feedback"}
+      </Button>
+    );
+  }
+
+  let note = null;
+  if (!application) note = eventDone ? "This event has finished." : `The organizer is asking for ${rupees(detail.ask)}.`;
+  else if (myTurn) note = `The organizer countered with ${rupees(latest.amount)}. Accept it or reply with your own number.`;
+  else if (open && !eventDone) note = `Your offer of ${rupees(latest.amount)} is with the organizer.`;
+  else if (application.status === "rejected") note = "The organizer didn't accept this offer.";
+  else if (application.status === "withdrawn") note = "You withdrew this offer.";
+  else if (accepted && !eventDone) note = "Your sponsorship is agreed. You can confirm it after the event.";
+  else if (accepted && application.sponsorConfirmedAt && !application.organizerConfirmedAt) note = "You confirmed. Waiting for the organizer, then feedback opens.";
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">Your sponsorship</h2>
+        {application ? <StatusBadge status={application.status} /> : null}
+      </div>
+      {accepted ? <p className="mt-1 font-display text-2xl font-bold text-brand">{rupees(application.finalAmount)}</p> : null}
+      {open ? <p className="mt-1 font-display text-2xl font-bold text-brand">{rupees(latest?.amount)}</p> : null}
+      <div className="mt-4">
+        <DealProgress application={application} eventDone={eventDone} hasFeedback={Boolean(feedback)} />
+      </div>
+      {note ? <p className="mt-4 text-sm text-ink-soft">{note}</p> : null}
+      <OfferHistory negotiations={application?.negotiations} viewer="sponsor" className="mt-3" />
+      {action ? <div className="mt-4">{action}</div> : null}
+    </Card>
   );
 }
 
 export default function SponsorEventPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const { user } = useAuth();
-  const [eventDetail, setEventDetail] = useState(null);
-  const [prediction, setPrediction] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [myFeedback, setMyFeedback] = useState(null);
-  const [tab, setTab] = useState("overview");
-  const [predicting, setPredicting] = useState(false);
-  const [submittingFeedback, setSubmittingFeedback] = useState(false);
-  const [workspaceLoading, setWorkspaceLoading] = useState(true);
-  const [organizerQualityMetrics, setOrganizerQualityMetrics] = useState(null);
-  const [showChat, setShowChat] = useState(false);
-  const [application, setApplication] = useState(null);
-  const [showApplyForm, setShowApplyForm] = useState(false);
+  const navigate = useNavigate();
+  const confirm = useConfirm();
   const [applying, setApplying] = useState(false);
+  const [countering, setCountering] = useState(false);
+  const [rating, setRating] = useState(false);
 
-  const DEFAULT_RATINGS = { organizerReputation: 0.5, lineupQuality: 0.55, activationMaturity: 0.5 };
+  const event = useResource(() => getSponsorEventById(id).then((res) => res.data), [id]);
+  const application = useResource(() => getMyEventApplication(id).then((res) => res.data), [id]);
+  const feedback = useResource(() => getMyEventFeedback(id).then((res) => res.data).catch(() => null), [id]);
+  const profile = useResource(() => getSponsorProfile().then((res) => res.data));
 
-  const computeOrganizerMetrics = (completedEvts) => {
-    const withFeedback = completedEvts.filter((e) => (e.totalFeedbacks || 0) > 0);
-    if (withFeedback.length === 0) return null;
-    let sumRep = 0, sumLineup = 0, totalCount = 0;
-    withFeedback.forEach((e) => {
-      const n = e.totalFeedbacks || 0;
-      sumRep        += (e.avgOrganizerReputation || DEFAULT_RATINGS.organizerReputation) * (n + 1) - DEFAULT_RATINGS.organizerReputation;
-      sumLineup     += (e.avgLineupQuality || DEFAULT_RATINGS.lineupQuality) * (n + 1) - DEFAULT_RATINGS.lineupQuality;
-      totalCount    += n;
+  if (event.loading) return <PageSpinner label="Loading event…" />;
+  if (event.error) return <Card><ErrorState error={event.error} onRetry={event.reload} /></Card>;
+
+  const detail = event.data;
+  const upcoming = detail.status === "upcoming";
+  const socialReach = (detail.socialMediaAccount || []).reduce((sum, item) => sum + (item.followers || 0), 0);
+
+  const handleCounter = async (offer) => {
+    try {
+      await counterAsSponsor(id, offer);
+      toast.success("Counter-offer sent");
+      setCountering(false);
+      application.reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  const handleAccept = async () => {
+    const amount = application.data?.negotiations?.at(-1)?.amount;
+    const yes = await confirm({
+      title: `Accept ${rupees(amount)}?`,
+      message: "This agrees the sponsorship at this amount.",
+      confirmLabel: "Accept offer",
     });
-    const divisor = totalCount + 1;
-    const r = (v) => parseFloat(v.toFixed(4));
-    return {
-      avgOrganizerReputation: r((sumRep + DEFAULT_RATINGS.organizerReputation) / divisor),
-      avgLineupQuality:       r((sumLineup + DEFAULT_RATINGS.lineupQuality) / divisor),
-      totalFeedbacks:         totalCount,
-    };
-  };
-
-  const loadData = async () => {
-    setWorkspaceLoading(true);
+    if (!yes) return;
     try {
-      const [profRes] = await Promise.all([getSponsorProfile()]);
-      setProfile(profRes?.data || profRes);
-
-      let detail;
-      try {
-        const detailRes = await getSponsorEventById(id);
-        detail = detailRes?.data || detailRes;
-      } catch (e) {
-        // Fallback: search in completed events list if direct fetch fails
-        const compRes = await getSponsorCompletedEvents({ page: 1, limit: 100 });
-        const allComp = compRes?.data?.events || compRes?.data || [];
-        detail = allComp.find(it => it._id === id);
-        if (!detail) throw e;
-      }
-      
-      setEventDetail(detail);
-
-      const isUpcomingEvent = detail?.status === "upcoming" || new Date(detail?.date) >= new Date();
-      if (isUpcomingEvent) {
-        try {
-          const completedRes = await getSponsorCompletedEvents({ page: 1, limit: 100 });
-          const payload = completedRes?.data || completedRes;
-          const allCompleted = payload?.events || payload?.data?.events || [];
-          const organizerId = detail?.organizer || detail?.organizerInfo?._id;
-          const orgCompleted = organizerId
-            ? allCompleted.filter((e) => {
-                const eOrg = e.organizer || e.organizerInfo?._id;
-                return String(eOrg) === String(organizerId);
-              })
-            : allCompleted;
-          setOrganizerQualityMetrics(computeOrganizerMetrics(orgCompleted));
-        } catch {}
-      }
-
-      try {
-        const fbRes = await getMyEventFeedback(id);
-        setMyFeedback(fbRes?.data || fbRes);
-      } catch {
-        setMyFeedback(null);
-      }
-
-      try {
-        const appRes = await getMyEventApplication(id);
-        setApplication(appRes?.data || null);
-      } catch (err) {
-        toast.error(getErrorMessage(err));
-      }
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-      navigate(-1);
-    }
-    setWorkspaceLoading(false);
-  };
-
-  useEffect(() => {
-    if (id) loadData();
-  }, [id]);
-
-  const handlePredict = async () => {
-    setTab("prediction");
-    setPredicting(true);
-    try {
-      const res = await getEventPrediction(id);
-      setPrediction(res?.data || res);
+      await acceptOfferAsSponsor(id);
+      toast.success("Deal agreed");
+      application.reload();
     } catch (err) {
       toast.error(getErrorMessage(err));
     }
-    setPredicting(false);
   };
 
-  const handleSubmitFeedback = async (e, isUpdate = false) => {
-    e.preventDefault();
-    setSubmittingFeedback(true);
-    const form = new FormData(e.currentTarget);
-    const payload = {
-      organizerReputation: Number(form.get("organizerReputation") || 0.5),
-      lineupQuality: Number(form.get("lineupQuality") || 0.5),
-    };
+  const openChat = async () => {
     try {
-      if (isUpdate) await updateEventFeedback(id, payload);
-      else await giveEventFeedback(id, payload);
-      const fbRes = await getMyEventFeedback(id);
-      setMyFeedback(fbRes?.data || fbRes);
-      toast.success(isUpdate ? "Feedback updated" : "Feedback submitted");
+      const conversation = await startConversation({ eventId: id, sponsorId: user._id, organizerId: detail.organizer });
+      navigate(`/messages/${conversation._id}`);
     } catch (err) {
       toast.error(getErrorMessage(err));
     }
-    setSubmittingFeedback(false);
   };
 
   const handleWithdraw = async () => {
-    if (!window.confirm("Withdraw this application? You can't apply to this event again.")) return;
+    const yes = await confirm({
+      title: "Withdraw your offer?",
+      message: "You won't be able to apply to this event again.",
+      confirmLabel: "Withdraw offer",
+      danger: true,
+    });
+    if (!yes) return;
     try {
-      const res = await withdrawApplication(id);
-      setApplication(res?.data || null);
-      toast.success("Application withdrawn");
+      await withdrawApplication(id);
+      toast.success("Offer withdrawn");
+      application.reload();
     } catch (err) {
       toast.error(getErrorMessage(err));
     }
   };
 
   const handleConfirm = async () => {
-    if (!window.confirm("Confirm that this sponsorship really happened?")) return;
+    const yes = await confirm({
+      title: "Did this sponsorship happen?",
+      message: "Confirm only if the event took place and your sponsorship went ahead.",
+      confirmLabel: "Yes, it happened",
+      cancelLabel: "Not yet",
+    });
+    if (!yes) return;
     try {
-      const res = await confirmSponsorship(id);
-      setApplication(res?.data || null);
+      await confirmSponsorship(id);
       toast.success("Sponsorship confirmed");
+      application.reload();
     } catch (err) {
       toast.error(getErrorMessage(err));
     }
   };
-
-  const handleApply = async (e) => {
-    e.preventDefault();
-    setApplying(true);
-    const form = new FormData(e.currentTarget);
-    try {
-      const res = await applyToEvent(id, {
-        amount: Number(form.get("amount")),
-        message: form.get("message"),
-      });
-      setApplication(res?.data || null);
-      setShowApplyForm(false);
-      toast.success("Application submitted");
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    }
-    setApplying(false);
-  };
-
-  if (workspaceLoading) {
-    return (
-      <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p className="muted">Loading event details...</p>
-      </div>
-    );
-  }
-
-  if (!eventDetail) return null;
-
-  const canApply = eventDetail.status === "upcoming";
-  const canConfirm = application?.status === "accepted" && eventDetail.status === "completed" && !application.sponsorConfirmedAt;
-  const feedbackOpen = Boolean(application?.sponsorConfirmedAt && application?.organizerConfirmedAt);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3 mb-2">
-         <button onClick={() => navigate(-1)} className="btn-secondary !py-2 !px-4">← Back to dashboard</button>
+    <>
+      <Link to="/" className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink">
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />Discover
+      </Link>
+
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <Card className="overflow-hidden">
+          <EventCover event={detail} className="h-44 w-full sm:h-64" />
+          <div className="p-5 sm:p-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={detail.status} />
+              <Badge>{titleCase(detail.eventCategory?.name)}</Badge>
+              {detail.isFestive ? <Badge tone="accent">Festival season</Badge> : null}
+              <Badge>{detail.isIndoor ? "Indoor" : "Outdoor"}</Badge>
+            </div>
+            <h1 className="mt-2 text-3xl font-bold">{detail.eventName}</h1>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-ink-soft">
+              <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4" aria-hidden="true" />{detail.location}</span>
+              <span className="flex items-center gap-1.5"><CalendarDays className="h-4 w-4" aria-hidden="true" />{fmtDate(detail.date)}</span>
+            </div>
+            <p className="mt-4 whitespace-pre-line text-ink-soft">{detail.eventDescription}</p>
+
+            <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-line pt-5 md:grid-cols-4">
+              <Fact label="Sponsorship ask" value={rupees(detail.ask)} />
+              <Fact label="Capacity" value={fmtINR(detail.capacity)} />
+              <Fact label="Ticket price" value={detail.ticketPrice ? rupees(detail.ticketPrice) : "Free"} />
+              <Fact label="Social reach" value={fmtINR(socialReach)} />
+            </dl>
+
+            <div className="mt-5 border-t border-line pt-5">
+              <h2 className="text-lg font-semibold">About the organizer</h2>
+              <p className="mt-1 text-ink-soft">
+                {detail.organizerInfo?.username || "Organizer"} has run {detail.pastEventOrganized || 0} past event{detail.pastEventOrganized === 1 ? "" : "s"}
+                {detail.totalFeedbacks
+                  ? `, with a ${Math.round(detail.avgOrganizerReputation * 100)}% rating from ${detail.totalFeedbacks} sponsor${detail.totalFeedbacks === 1 ? "" : "s"}.`
+                  : ". No sponsor ratings yet."}
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        <div className="space-y-4 lg:sticky lg:top-8">
+          <DealCard
+            detail={detail}
+            application={application.data}
+            feedback={feedback.data}
+            hasProfile={Boolean(profile.data)}
+            onApply={() => setApplying(true)}
+            onAccept={handleAccept}
+            onCounter={() => setCountering(true)}
+            onWithdraw={handleWithdraw}
+            onConfirm={handleConfirm}
+            onFeedback={() => setRating(true)}
+          />
+
+          {upcoming ? (
+            <Card surface="border-brand-strong bg-brand-strong" className="p-5">
+              <h2 className="text-lg font-semibold text-white">Is this event right for you?</h2>
+              <p className="mt-1 text-sm text-white/75">Get expected turnout, brand fit and the chance of a deal.</p>
+              {profile.data ? (
+                <Button variant="accent" className="mt-4 w-full" to={`/sponsor/analysis/${id}`}>
+                  <Sparkles className="h-4 w-4" aria-hidden="true" />Run AI analysis
+                </Button>
+              ) : <Button variant="accent" className="mt-4 w-full" to="/brand">Create brand profile first</Button>}
+            </Card>
+          ) : null}
+
+          <Button variant="secondary" className="w-full" onClick={openChat}>
+            <MessageCircle className="h-4 w-4" aria-hidden="true" />Message organizer
+          </Button>
+        </div>
       </div>
 
-      <section className="workspace-panel space-y-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex gap-5 min-w-0">
-            <img
-              src={resolveMediaUrl(eventDetail.thumbnail) || "https://placehold.co/360x240?text=Event"}
-              alt={eventDetail.eventName}
-              className="w-44 h-32 rounded-3xl object-cover flex-shrink-0"
-            />
+      <ApplyModal
+        open={applying}
+        ask={detail.ask}
+        eventId={id}
+        onClose={() => setApplying(false)}
+        onDone={() => {
+          setApplying(false);
+          application.reload();
+        }}
+      />
 
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-3 mb-3">
-                <h3 className="text-5xl font-black leading-none">{eventDetail.eventName}</h3>
-                <span
-                  className={
-                    STATUS_CLASS[
-                      eventDetail.status ||
-                        (new Date(eventDetail.date) < new Date() ? "completed" : "upcoming")
-                    ] || STATUS_CLASS.upcoming
-                  }
-                >
-                  {eventDetail.status ||
-                    (new Date(eventDetail.date) < new Date() ? "completed" : "upcoming")}
-                </span>
-              </div>
-
-              <p className="section-subtitle text-lg leading-8 max-w-3xl">
-                {eventDetail.eventDescription}
-              </p>
-
-              <div className="flex flex-wrap gap-2 mt-4">
-                <span className="info-chip">
-                  {eventDetail.eventCategory?.name || "Event"}
-                </span>
-                <span className="info-chip">{eventDetail.location}</span>
-                <span className="info-chip">
-                  {new Date(eventDetail.date).toLocaleDateString("en-IN", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </span>
-                <span className="info-chip">{eventDetail.isIndoor ? "Indoor" : "Outdoor"}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            {application ? (
-              <span className={APPLICATION_STATUS_CLASS[application.status] || APPLICATION_STATUS_CLASS.pending}>
-                Application {application.status}
-                {application.status === "accepted" ? ` · ₹${fmtINR(application.finalAmount)}` : ""}
-              </span>
-            ) : canApply ? (
-              <button className="btn-primary" onClick={() => setShowApplyForm(true)}>Apply for sponsorship</button>
-            ) : null}
-            {application?.status === "pending" ? (
-              <button className="btn-secondary" onClick={handleWithdraw}>Withdraw</button>
-            ) : null}
-            {canConfirm ? (
-              <button className="btn-primary" onClick={handleConfirm}>Confirm sponsorship happened</button>
-            ) : null}
-            <button className="btn-secondary" onClick={() => setShowChat(true)}>Chat with organizer</button>
-          </div>
-        </div>
-
-        <div className="tab-row mt-6">
-          {["overview", "prediction", "feedback"].map((t) => (
-            <button
-              key={t}
-              className={cx("tab-pill", tab === t && "active")}
-              onClick={() => setTab(t)}
-            >
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
-          ))}
-        </div>
-
-        {tab === "overview" && (
-          <div className="grid xl:grid-cols-[1fr_auto] gap-6 items-start animate-fade-up">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <Metric label="Ask" value={`₹${fmtINR(eventDetail.ask)}`} />
-              <Metric label="Ticket price" value={`₹${fmtINR(eventDetail.ticketPrice)}`} />
-              <Metric label="Capacity" value={eventDetail.capacity} />
-              <Metric label="Marketing budget" value={`₹${fmtINR(eventDetail.marketingBudget)}`} />
-            </div>
-
-            <div className="surface-card min-w-[320px]">
-              <div className="field-label">Quality metrics</div>
-              <div className="grid gap-4 mt-4">
-                {[
-                  ["Organizer reputation", organizerQualityMetrics?.avgOrganizerReputation || eventDetail.avgOrganizerReputation || 0.5],
-                  ["Lineup quality", organizerQualityMetrics?.avgLineupQuality || eventDetail.avgLineupQuality || 0.5],
-                ].map(([label, val]) => (
-                  <div key={label}>
-                    <div className="flex justify-between text-xs font-bold mb-2">
-                      <span className="muted uppercase tracking-wider">{label}</span>
-                      <span>{Number(val).toFixed(2)}</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-[var(--bg-soft)] rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-[var(--accent)]"
-                        style={{ width: `${Math.min(100, val * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="faint text-[10px] mt-6 uppercase tracking-wider font-extrabold">
-                {organizerQualityMetrics ? "Historical signal verified" : "Limited feedback data"}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {tab === "prediction" && (
-          <div className="animate-fade-up min-h-[400px]">
-             <div className="surface-card text-center py-24">
-                <div className="text-6xl mb-6">🤖</div>
-                <h3 className="text-3xl font-black mb-3">AI Event Analysis</h3>
-                <p className="muted mb-10 max-w-md mx-auto leading-7">Use our AI engine to calculate ROI probability, brand-fit score, and generated automated outreach drafts.</p>
-                <button className="btn-primary !px-10 !py-4" onClick={() => navigate(`/sponsor/analysis/${id}`)}>
-                  Run AI prediction →
-                </button>
-              </div>
-          </div>
-        )}
-
-        {tab === "feedback" && (
-          <div className="max-w-2xl animate-fade-up">
-            <h4 className="text-2xl font-black mb-2">Post-event feedback</h4>
-            {feedbackOpen ? (
-              <>
-                <p className="muted mb-8 leading-7">Help the community by rating the organizer’s actual performance. This data improves future predictions.</p>
-                <FeedbackForm
-                  initial={myFeedback}
-                  onSubmit={(e) => handleSubmitFeedback(e, !!myFeedback)}
-                  submitting={submittingFeedback}
-                  submitLabel={myFeedback ? "Update feedback" : "Submit feedback"}
-                />
-              </>
-            ) : (
-              <p className="muted leading-7">
-                Feedback opens after the event, once your sponsorship was accepted and both you and the organizer confirm it happened.
-              </p>
-            )}
-          </div>
-        )}
-      </section>
-
-      {showApplyForm && (
-        <ApplyForm
-          ask={eventDetail.ask}
-          onSubmit={handleApply}
-          onClose={() => setShowApplyForm(false)}
-          submitting={applying}
-        />
-      )}
-
-      {showChat && (
-        <ChatBox
+      {rating ? (
+        <FeedbackModal
+          existing={feedback.data}
           eventId={id}
-          sponsorId={user?._id}
-          organizerId={eventDetail.organizer?._id || eventDetail.organizer}
-          currentUserRole="sponsor"
-          onClose={() => setShowChat(false)}
+          onClose={() => setRating(false)}
+          onDone={() => {
+            setRating(false);
+            feedback.reload();
+          }}
         />
-      )}
-    </div>
+      ) : null}
+
+      <OfferModal
+        open={countering}
+        currentAmount={application.data?.negotiations?.at(-1)?.amount}
+        onClose={() => setCountering(false)}
+        onSubmit={handleCounter}
+      />
+    </>
   );
 }

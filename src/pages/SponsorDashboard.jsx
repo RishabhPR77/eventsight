@@ -1,565 +1,127 @@
-import React, { useEffect, useMemo, useState } from "react";
-import toast from "react-hot-toast";
-import {
-  createSponsorProfile,
-  deleteSponsorProfile,
-  fetchBrandTypes,
-  getMyApplications,
-  getSponsorEvents,
-  getSponsorProfile,
-  getSponsorCompletedEvents,
-  updateSponsorProfile,
-} from "@/lib/api";
-import { APPLICATION_STATUS_CLASS, fmtINR, getErrorMessage, resolveMediaUrl } from "@/lib/utils";
-import { io } from "socket.io-client";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { ArrowRight, Compass, Search, Store } from "lucide-react";
+import BrandForm from "@/components/brand/BrandForm";
+import EventCard, { EventGridSkeleton } from "@/components/events/EventCard";
+import Button from "@/components/ui/Button";
+import { Card, EmptyState, ErrorState, PageHeader, Tabs } from "@/components/ui/Primitives";
+import { useResource } from "@/hooks/useResource";
+import { getMyApplications, getSponsorCompletedEvents, getSponsorEvents, getSponsorProfile } from "@/lib/api";
+import { titleCase } from "@/lib/utils";
 
-const SOCKET_URL = import.meta.env.VITE_BACKEND_BASE_URL?.replace("/api", "") || "http://localhost:8080";
+const WHEN = [
+  { id: "upcoming", label: "Upcoming" },
+  { id: "completed", label: "Past events" },
+];
 
-const cx = (...xs) => xs.filter(Boolean).join(" ");
-const getBrandTypeName = (brandType, brandTypes = []) => {
-  if (!brandType) return "";
-  if (typeof brandType === "object") return brandType.name || "";
-  return brandTypes.find((item) => item?._id === brandType)?.name || "";
-};
-
-function IconBadge({ children, tone = "default" }) {
-  return <span className={cx("organizer-stat-icon", tone !== "default" && `organizer-stat-icon-${tone}`)}>{children}</span>;
-}
-
-function TargetIcon() {
+function ActionNotice({ count }) {
+  if (!count) return null;
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2" />
-      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
-      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-      <path d="M17 7l4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M18 3h3v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <Link to="/sponsorships" className="mb-6 flex items-center justify-between gap-3 rounded-2xl bg-marigold-soft p-4 transition hover:bg-[#FBE8BF]">
+      <span className="font-semibold">
+        {count === 1 ? "1 sponsorship needs" : `${count} sponsorships need`} your attention
+      </span>
+      <ArrowRight className="h-5 w-5 shrink-0" aria-hidden="true" />
+    </Link>
   );
 }
 
-function InsightsIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="16" rx="4" stroke="currentColor" strokeWidth="2" />
-      <path d="M8 15V10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M12 15V7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path d="M16 15v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function DiamondIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M4 9 8.5 4h7L20 9l-8 11L4 9Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M8.5 4 12 9l3.5-5" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M4 9h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="m5 12 4.2 4.2L19 6.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function StatCard({ label, value, hint, helper, icon, tone }) {
-  return (
-    <div className="organizer-stat-card">
-      <div className="organizer-stat-top">
-        <div className="flex items-center gap-3 min-w-0">
-          <IconBadge tone={tone}>{icon}</IconBadge>
-          <div className="min-w-0">
-            <div className="organizer-stat-label">{label}</div>
-            {hint ? <div className="organizer-stat-hint">{hint}</div> : null}
-          </div>
-        </div>
-      </div>
-      <div className="organizer-stat-value">{value}</div>
-      {helper ? <div className="organizer-stat-helper">{helper}</div> : null}
-      <div className="organizer-stat-glow" />
-    </div>
-  );
-}
-
-function EventCard({ event, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="event-card text-left w-full !p-0"
-      style={{ overflow: "hidden", display: "block" }}
-    >
-      <div className="relative">
-        <img
-          src={resolveMediaUrl(event.thumbnail) || "https://placehold.co/400x200?text=Event"}
-          alt={event.eventName}
-          className="w-full h-44 object-cover"
-        />
-        <div className="absolute top-3 right-3">
-          <span
-            className={cx(
-              "px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider backdrop-blur-md shadow-lg",
-              (event.status === "completed" || new Date(event.date) < new Date()) ? "bg-indigo-500/80 text-white" : "bg-emerald-500/80 text-white"
-            )}
-          >
-            {event.status || (new Date(event.date) < new Date() ? "completed" : "upcoming")}
-          </span>
-        </div>
-      </div>
-
-      <div className="p-5">
-        <div className="flex justify-between items-start gap-3">
-          <div className="min-w-0">
-            <div className="text-xl font-black truncate">{event.eventName}</div>
-            <div className="muted text-sm mt-1 flex items-center gap-1.5">
-              <span className="w-1 h-1 rounded-full bg-[var(--accent)]" />
-              {event.location}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2 mt-4">
-          <div className="bg-[var(--bg-soft)] px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase text-[var(--text-soft)]">
-            ₹{fmtINR(event.ask)}
-          </div>
-          <div className="bg-[var(--bg-soft)] px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase text-[var(--text-soft)]">
-            {event.eventCategory?.name || "Event"}
-          </div>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function ApplicationRow({ application, onOpen }) {
-  const { event, status, finalAmount, negotiations } = application;
-  const removed = !event || event.isDeleted;
-  const amount = status === "accepted" ? finalAmount : negotiations?.[negotiations.length - 1]?.amount;
-
-  return (
-    <div className="soft-card !py-4 !px-5 flex flex-wrap items-center gap-4">
-      <div className="flex-1 min-w-[220px]">
-        <div className="text-lg font-black">{removed ? "Event no longer available" : event.eventName}</div>
-        <div className="muted text-sm mt-1">
-          {removed ? null : `${event.location} · ${new Date(event.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} · `}
-          ₹{fmtINR(amount)} {status === "accepted" ? "agreed" : "offered"}
-        </div>
-      </div>
-      <span className={APPLICATION_STATUS_CLASS[status] || APPLICATION_STATUS_CLASS.pending}>{status}</span>
-      {removed ? null : <button className="btn-secondary !py-2 !px-4 !text-xs" onClick={onOpen}>View event</button>}
-    </div>
-  );
-}
-
-function BrandForm({ initial, brandTypes, onClose, onSubmit, submitting }) {
-  const defaults = initial || {};
-  const [preview, setPreview] = useState(defaults.logo || null);
-
-  const handleFile = (e) => {
-    const file = e.target.files[0];
-    if (file) setPreview(URL.createObjectURL(file));
-  };
-  return (
-    <div className="modal-overlay">
-      <div className="modal-card animate-fade-up">
-        <div className="modal-header">
-          <div>
-            <h3 className="text-3xl font-black">{defaults.brandName ? "Edit Brand Profile" : "Create Brand Profile"}</h3>
-            <p className="muted mt-1">Define your brand identity to unlock AI event analysis.</p>
-          </div>
-          <button type="button" className="btn-secondary" onClick={onClose}>Close</button>
-        </div>
-
-        <form onSubmit={onSubmit} className="space-y-6" encType="multipart/form-data">
-          <div className="modal-section-grid">
-            <div>
-              <label className="field-label">Brand name</label>
-              <input name="brandName" defaultValue={defaults.brandName || ""} required className="input-field" placeholder="e.g. Red Bull" />
-            </div>
-            <div>
-              <label className="field-label">Brand type</label>
-              <select
-                name="brandType"
-                defaultValue={typeof defaults.brandType === "object" ? defaults.brandType?._id || "" : defaults.brandType || ""}
-                required
-                className="select-field"
-              >
-                <option value="">Select brand type</option>
-                {brandTypes.map((type) => (
-                  <option key={type._id} value={type._id}>{type.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="modal-section-grid">
-            <div>
-              <label className="field-label">Primary KPI</label>
-              <select name="brandKpi" defaultValue={defaults.brandKpi || "awareness"} className="select-field">
-                <option value="awareness">Brand awareness</option>
-                <option value="leads">Lead generation</option>
-                <option value="sales">Direct sales</option>
-                <option value="hybrid">Hybrid</option>
-              </select>
-            </div>
-            <div>
-              <label className="field-label">City focus</label>
-              <select name="cityFocus" defaultValue={defaults.cityFocus || "all_mp"} className="select-field">
-                <option value="all_mp">All MP</option>
-                <option value="metro">Metro cities</option>
-                <option value="tier2">Tier 2 cities</option>
-                <option value="pilgrimage">Pilgrimage sites</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="field-label">Brand description</label>
-            <textarea name="description" defaultValue={defaults.description || ""} rows={4} required className="textarea-field" placeholder="Describe your brand's target audience and goals..." />
-          </div>
-
-          <div>
-            <label className="field-label">Logo</label>
-            <div className="flex gap-4 items-center">
-               <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center overflow-hidden border">
-                  {preview ? (
-                    <img src={preview} className="w-full h-full object-cover" />
-                  ) : <span className="text-[10px] muted">No logo</span>}
-               </div>
-               <input name="logo" type="file" accept="image/*" onChange={handleFile} className="input-field flex-1" />
-            </div>
-          </div>
-
-          <button type="submit" disabled={submitting} className="btn-primary w-full">
-            {submitting ? "Saving..." : defaults.brandName ? "Save changes" : "Create profile"}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-export default function SponsorDashboard({ user }) {
-  const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState(null);
-  const [brandTypes, setBrandTypes] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [applications, setApplications] = useState([]);
+export default function SponsorDashboard() {
+  const [when, setWhen] = useState("upcoming");
   const [search, setSearch] = useState("");
-  const [mode, setMode] = useState(null);
-  const [submittingBrand, setSubmittingBrand] = useState(false);
+  const [city, setCity] = useState("");
+  const [category, setCategory] = useState("");
+  const [creatingProfile, setCreatingProfile] = useState(false);
 
-  // Filters
-  const [fCity, setFCity] = useState("All Cities");
-  const [fCat, setFCat] = useState("All Categories");
-  const [fStatus, setFStatus] = useState("");
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      // Use .catch(() => null) for getSponsorProfile so it doesn't crash the whole page if 404 (first time user)
-      const [profRes, evtsRes, compRes, typesRes, appsRes] = await Promise.all([
-        getSponsorProfile().catch((err) => {
-          if (err.response?.status !== 404) console.error("Profile fetch error:", err);
-          return null;
-        }),
-        getSponsorEvents({ page: 1, limit: 100 }).catch(() => null),
-        getSponsorCompletedEvents({ page: 1, limit: 100 }).catch(() => null),
-        fetchBrandTypes().catch(() => []),
-        getMyApplications().catch((err) => {
-          toast.error(getErrorMessage(err));
-          return null;
-        }),
-      ]);
-
-      setProfile(profRes?.data || null);
-      setApplications(appsRes?.data || []);
-
-      const upcoming = evtsRes?.data?.events || evtsRes?.data || [];
-      const completed = compRes?.data?.events || compRes?.data || [];
-      setEvents([...upcoming, ...completed]);
-
-      setBrandTypes(Array.isArray(typesRes) ? typesRes : (typesRes?.data || []));
-    } catch (err) {
-      console.error("Dashboard load error:", err);
-      toast.error("Failed to load dashboard data");
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const handleBrandSubmit = async (e) => {
-    e.preventDefault();
-    setSubmittingBrand(true);
-    const rawForm = e.currentTarget;
-    const form = new FormData(rawForm);
-    form.append("_v", Date.now()); // Ensure body is never empty
-    try {
-      if (profile) {
-        await updateSponsorProfile(form);
-        toast.success("Profile updated");
-      } else {
-        await createSponsorProfile(form);
-        toast.success("Profile created");
-      }
-      setMode(null);
-      loadData();
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    }
-    setSubmittingBrand(false);
-  };
-
-  const filteredEvents = useMemo(() => {
-    return events.filter((evt) => {
-      const matchSearch =
-        !search ||
-        evt.eventName?.toLowerCase().includes(search.toLowerCase()) ||
-        evt.location?.toLowerCase().includes(search.toLowerCase()) ||
-        evt.eventCategory?.name?.toLowerCase().includes(search.toLowerCase());
-
-        const matchCity = fCity === "All Cities" || evt.location === fCity;
-        const matchCat = fCat === "All Categories" || evt.eventCategory?.name === fCat;
-        const status = evt.status || (new Date(evt.date) < new Date() ? "completed" : "upcoming");
-        const matchStatus = !fStatus || status === fStatus;
-
-        return matchSearch && matchCity && matchCat && matchStatus;
-    });
-  }, [events, search, fCity, fCat, fStatus]);
-
-  const cities = useMemo(() => ["All Cities", ...new Set(events.map((e) => e.location))].filter(Boolean), [events]);
-  const categories = useMemo(
-    () => ["All Categories", ...new Set(events.map((e) => e.eventCategory?.name))].filter(Boolean),
-    [events]
+  const profile = useResource(() => getSponsorProfile().then((res) => res.data));
+  const deals = useResource(() => getMyApplications().then((res) => res.data));
+  const events = useResource(
+    () => (when === "upcoming" ? getSponsorEvents({ page: 1, limit: 50 }) : getSponsorCompletedEvents({ page: 1, limit: 50 })).then((res) => res.data.events),
+    [when]
   );
 
-  const stats = {
-    available: events.filter((e) => (e.status || (new Date(e.date) >= new Date() ? "upcoming" : "")) === "upcoming").length,
-    completed: events.filter((e) => (e.status || (new Date(e.date) < new Date() ? "completed" : "")) === "completed").length,
-    profile: profile ? "Ready" : "Missing",
+  const list = useMemo(() => events.data || [], [events.data]);
+  const cities = useMemo(() => [...new Set(list.map((event) => event.location))].sort(), [list]);
+  const categories = useMemo(() => [...new Set(list.map((event) => event.eventCategory?.name).filter(Boolean))].sort(), [list]);
+
+  const shown = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return list.filter((event) => (
+      (!city || event.location === city)
+      && (!category || event.eventCategory?.name === category)
+      && (!term || event.eventName.toLowerCase().includes(term) || event.location.toLowerCase().includes(term))
+    ));
+  }, [list, search, city, category]);
+
+  const toConfirm = (deals.data || []).filter((item) => (
+    (item.status === "accepted" && item.event?.status === "completed" && !item.sponsorConfirmedAt)
+    || (["pending", "negotiating"].includes(item.status) && item.event?.status === "upcoming" && item.negotiations?.at(-1)?.from === "organizer")
+  )).length;
+
+  const clearFilters = () => {
+    setSearch("");
+    setCity("");
+    setCategory("");
   };
 
-  const quickHighlights = [
-    `${stats.available} live opportunit${stats.available === 1 ? "y" : "ies"}`,
-    `${stats.completed} analyzed deal${stats.completed === 1 ? "" : "s"}`,
-    profile ? "Profile ready for matching" : "Complete profile to improve matching",
-  ];
-
-  if (loading) return <div className="text-center py-20 muted">Loading dashboard data...</div>;
-
   return (
-    <div className="space-y-6">
-      <section className="hero-panel organizer-hero-panel sponsor-hero-panel">
-        <div className="organizer-hero-orb organizer-hero-orb-left" />
-        <div className="organizer-hero-orb organizer-hero-orb-right" />
-        <div className="organizer-hero-grid relative z-10">
-          <div className="space-y-6">
-            <div className="space-y-4">
-              <div className="organizer-hero-kicker">Sponsor ecosystem</div>
-              <div className="space-y-3">
-                <h1 className="organizer-hero-title">Welcome back, {user?.username || "Sponsor"}</h1>
-                <p className="organizer-hero-subtitle sponsor-hero-subtitle">
-                  Discover high-fit events, compare opportunities faster, and keep your sponsorship pipeline organized in one place.
-                </p>
-              </div>
-            </div>
+    <>
+      <PageHeader title="Discover events" description="Find events worth sponsoring, and check the fit before you commit." />
 
-            <div className="organizer-hero-chip-row">
-              {quickHighlights.map((item) => (
-                <span key={item} className="organizer-hero-chip">
-                  <CheckIcon />
-                  {item}
-                </span>
-              ))}
-            </div>
-          </div>
+      <ActionNotice count={toConfirm} />
 
-          <div className="organizer-hero-actions">
-            <button
-              className="organizer-hero-create-btn"
-              onClick={() => setMode(profile ? "edit" : "create")}
-            >
-              <span className="text-xl leading-none">+</span>
-              {profile ? "Edit profile" : "Create profile"}
-            </button>
-            <div className="organizer-hero-tip-card sponsor-hero-tip-card">
-              <div className="organizer-hero-tip-label">Quick focus</div>
-              <div className="organizer-hero-tip-text">
-                Keep profile details updated for better event matching.
-              </div>
-            </div>
+      {!profile.loading && !profile.data ? (
+        <Card surface="border-brand/20 bg-brand-soft" className="mb-6 flex flex-wrap items-center gap-4 p-5">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-brand"><Store className="h-5 w-5" aria-hidden="true" /></span>
+          <div className="min-w-0 flex-1 basis-56">
+            <h2 className="text-lg font-semibold">Set up your brand first</h2>
+            <p className="text-sm text-ink-soft">You'll need a brand profile to apply to events and run AI analysis.</p>
           </div>
+          <Button onClick={() => setCreatingProfile(true)}>Create brand profile</Button>
+        </Card>
+      ) : null}
+
+      <div className="mb-5 flex flex-wrap items-center gap-3">
+        <Tabs tabs={WHEN} value={when} onChange={setWhen} label="Event timing" />
+        <div className="relative min-w-[200px] flex-1">
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" aria-hidden="true" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search events" placeholder="Search by name or city" className="field-control pl-10" />
         </div>
+        <select aria-label="City" value={city} onChange={(e) => setCity(e.target.value)} className="field-control w-auto flex-1 sm:flex-none">
+          <option value="">All cities</option>
+          {cities.map((item) => <option key={item}>{item}</option>)}
+        </select>
+        <select aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value)} className="field-control w-auto flex-1 sm:flex-none">
+          <option value="">All categories</option>
+          {categories.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
+        </select>
+      </div>
 
-        <div className="organizer-stat-grid relative z-10">
-          <StatCard
-            label="Live opportunities"
-            value={stats.available}
-            hint="Events you can explore now"
-            helper="Shortlist the best options faster."
-            icon={<TargetIcon />}
-            tone="blue"
-          />
-          <StatCard
-            label="Analyzed deals"
-            value={stats.completed}
-            hint="Past evaluations saved"
-            helper="Review what you already compared."
-            icon={<InsightsIcon />}
-            tone="gold"
-          />
-          <StatCard
-            label="Profile readiness"
-            value={stats.profile === "Ready" ? "100%" : "0%"}
-            hint={stats.profile === "Ready" ? "Brand profile complete" : "Complete your brand profile"}
-            helper="Better profile, better event matching."
-            icon={<DiamondIcon />}
-            tone="emerald"
-          />
+      {events.loading ? <EventGridSkeleton /> : null}
+      {events.error ? <Card><ErrorState error={events.error} onRetry={events.reload} /></Card> : null}
+      {!events.loading && !events.error && shown.length === 0 ? (
+        <Card>
+          {list.length === 0 ? (
+            <EmptyState icon={Compass} title={when === "upcoming" ? "No upcoming events yet" : "No past events yet"} description="New events appear here as organizers publish them." />
+          ) : (
+            <EmptyState icon={Search} title="No events match" description="Try a different search or filter." action={<Button variant="secondary" onClick={clearFilters}>Clear filters</Button>} />
+          )}
+        </Card>
+      ) : null}
+      {!events.loading && shown.length > 0 ? (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {shown.map((event) => <EventCard key={event._id} event={event} to={`/sponsor/event/${event._id}`} />)}
         </div>
-      </section>
+      ) : null}
 
-      {/* Brand Profile section */}
-      <section className="surface-card">
-        {profile ? (
-          <div className="grid lg:grid-cols-[1fr_auto] gap-6 items-start">
-            <div className="flex gap-5 items-start min-w-0">
-              <img
-                src={resolveMediaUrl(profile.logo) || "https://placehold.co/120x120?text=Brand"}
-                alt={profile.brandName}
-                className="w-28 h-28 rounded-3xl object-cover flex-shrink-0"
-              />
-
-              <div className="min-w-0 flex-1">
-                <div className="text-4xl font-black mb-3 tracking-tight">{profile.brandName}</div>
-                <p className="text-gray-500 leading-7 max-w-2xl text-[0.95rem]">{profile.description}</p>
-                <div className="flex flex-wrap gap-2 mt-5">
-                  <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[11px] font-black uppercase tracking-wider border border-indigo-100">
-                    {getBrandTypeName(profile.brandType, brandTypes) || "Industry"}
-                  </span>
-                  <span className="px-3 py-1 bg-slate-50 text-slate-600 rounded-full text-[11px] font-black uppercase tracking-wider border border-slate-100">{profile.brandKpi}</span>
-                  <span className="px-3 py-1 bg-slate-50 text-slate-600 rounded-full text-[11px] font-black uppercase tracking-wider border border-slate-100">{profile.cityFocus}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button className="btn-secondary" onClick={() => setMode("edit")}>Edit profile</button>
-              <button className="btn-danger" style={{ background: "rgba(239, 68, 68, 0.08)", color: "#dc2626" }} onClick={async () => {
-                if (window.confirm("Delete brand profile?")) {
-                  try { await deleteSponsorProfile(); loadData(); } catch (err) { toast.error(getErrorMessage(err)); }
-                }
-              }}>Delete profile</button>
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-10">
-            <div className="text-4xl mb-4">📢</div>
-            <h3 className="text-2xl font-black mb-2">Create your brand profile</h3>
-            <p className="muted mb-6">Complete your profile to unlock high-fit AI event analysis and predictions.</p>
-            <button className="btn-primary" onClick={() => setMode("create")}>Get started</button>
-          </div>
-        )}
-      </section>
-
-      {/* Applications section */}
-      <section className="surface-card">
-        <div className="section-kicker mb-2">Sponsorship pipeline</div>
-        <h2 className="section-title">My applications</h2>
-        {applications.length === 0 ? (
-          <p className="muted mt-4">Open an upcoming event and apply for sponsorship to track it here.</p>
-        ) : (
-          <div className="space-y-3 mt-6">
-            {applications.map((application) => (
-              <ApplicationRow
-                key={application._id}
-                application={application}
-                onOpen={() => navigate(`/sponsor/event/${application.event._id}`)}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Events section */}
-      <section className="space-y-6">
-        <div className="surface-card">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="section-kicker mb-2">Events board</div>
-              <h2 className="section-title">Browse opportunities</h2>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search by name, city, or category"
-                  className="input-field !pl-10 min-w-[320px]"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 muted">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
-                </span>
-              </div>
-              <button className="btn-secondary" onClick={loadData}>Refresh events</button>
-            </div>
-          </div>
-
-          <div className="flex items-center flex-wrap gap-3 mt-6">
-            <select className="select-field !w-auto !py-2" value={fCity} onChange={(e) => setFCity(e.target.value)}>
-              {cities.map((c) => <option key={c}>{c}</option>)}
-            </select>
-            <select className="select-field !w-auto !py-2" value={fCat} onChange={(e) => setFCat(e.target.value)}>
-              {categories.map((c) => <option key={c}>{c}</option>)}
-            </select>
-            <div className="tab-row !mt-0 !flex-shrink-0">
-              {[["", "All"], ["upcoming", "Upcoming"], ["completed", "Completed"]].map(([id, label]) => (
-                <button key={id} className={cx("tab-pill", fStatus === id && "active")} onClick={() => setFStatus(id)}>{label}</button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-fade-up">
-          {filteredEvents.map((evt) => (
-            <EventCard
-              key={evt._id}
-              event={evt}
-              onClick={() => navigate(`/sponsor/event/${evt._id}`)}
-            />
-          ))}
-        </div>
-
-        {!filteredEvents.length && search && (
-          <div className="surface-card text-center py-20">
-            <div className="text-4xl mb-4">🔍</div>
-            <h3 className="text-xl font-black mb-2">No events found matching "{search}"</h3>
-            <p className="muted">Try adjusting your filters or search terms.</p>
-          </div>
-        )}
-      </section>
-
-      {mode && (
-        <BrandForm
-          initial={mode === "edit" ? profile : null}
-          brandTypes={brandTypes}
-          onClose={() => setMode(null)}
-          onSubmit={handleBrandSubmit}
-          submitting={submittingBrand}
-        />
-      )}
-    </div>
+      <BrandForm
+        open={creatingProfile}
+        onClose={() => setCreatingProfile(false)}
+        onSaved={() => {
+          setCreatingProfile(false);
+          profile.reload();
+        }}
+      />
+    </>
   );
 }

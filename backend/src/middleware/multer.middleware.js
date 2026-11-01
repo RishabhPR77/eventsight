@@ -21,12 +21,16 @@ const hasImageSignature=(bytes)=>{
     return isJpeg || isPng || isWebp
 }
 
+const hasPdfSignature=(bytes)=>bytes.toString("latin1",0,5)==="%PDF-"
+
+const ATTACHMENT_EXTENSIONS={...EXTENSIONS,"application/pdf":".pdf"}
+
 const storage=multer.diskStorage({
     destination:function(req,file,cb){
         cb(null,TEMP_DIR)
     },
     filename:function(req,file,cb){
-        cb(null,crypto.randomUUID()+EXTENSIONS[file.mimetype]);
+        cb(null,crypto.randomUUID()+ATTACHMENT_EXTENSIONS[file.mimetype]);
     }
 })
 
@@ -47,7 +51,22 @@ const upload=multer({
     }
 })
 
-const checkImage=(req,res,next)=>{
+const attachmentUpload=multer({
+    storage:storage,
+    fileFilter:(req,file,cb)=>{
+        if(ATTACHMENT_EXTENSIONS[file.mimetype]){
+            cb(null,true);
+        }else{
+            cb(new ApiError(400,"You can attach images and PDFs"),false);
+        }
+    },
+    limits:{
+        fileSize:1024*1024*5,
+        files:1
+    }
+})
+
+const checkFile=(isAllowed,message)=>(req,res,next)=>{
     if(!req.file){
         return next();
     }
@@ -60,12 +79,16 @@ const checkImage=(req,res,next)=>{
     fs.readSync(fd,bytes,0,12,0)
     fs.closeSync(fd)
 
-    if(!hasImageSignature(bytes)){
-        return next(new ApiError(400,"Only JPG, PNG and WebP images are allowed"));
+    if(!isAllowed(bytes)){
+        return next(new ApiError(400,message));
     }
     next();
 }
 
-const uploadImage=(fieldName)=>[upload.single(fieldName),checkImage]
+const checkImage=checkFile(hasImageSignature,"Only JPG, PNG and WebP images are allowed")
+const checkAttachment=checkFile((bytes)=>hasImageSignature(bytes)||hasPdfSignature(bytes),"You can attach images and PDFs")
 
-module.exports={uploadImage}
+const uploadImage=(fieldName)=>[upload.single(fieldName),checkImage]
+const uploadAttachment=(fieldName)=>[attachmentUpload.single(fieldName),checkAttachment]
+
+module.exports={uploadImage,uploadAttachment}

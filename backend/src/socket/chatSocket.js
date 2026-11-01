@@ -1,14 +1,17 @@
 // backend/socket/chatSocket.js
 const jwt = require('jsonwebtoken');
 const cookie = require('cookie');
-const {Message} = require('../models/message.model');
 const {Conversation} = require('../models/conversation.model');
 const {User} = require('../models/user.model');
 const {isParticipant} = require('../utility/chatAccess');
+const {postMessage} = require('../utility/chatService');
+const {setIo} = require('../utility/notifier');
 
 const MAX_MESSAGE_LENGTH = 2000;
 
 module.exports = (io) => {
+  setIo(io);
+
   // Socket ka user cookie ke JWT se aata hai, client ke data se nahi
   io.use(async (socket, next) => {
     try {
@@ -28,9 +31,8 @@ module.exports = (io) => {
 
   io.on('connection', (socket) => {
     const userId = socket.user._id.toString();
-    console.log('User connected:', socket.id);
 
-    // Personal room for global notifications
+    // Personal room for notifications
     socket.join(userId);
 
     // Room join karo (conversationId ke basis pe), sirf participants ke liye
@@ -45,43 +47,34 @@ module.exports = (io) => {
       }
     });
 
+    socket.on('leave_room', (conversationId) => {
+      socket.leave(conversationId);
+    });
+
+    socket.on('typing', (conversationId) => {
+      if (socket.rooms.has(conversationId)) {
+        socket.to(conversationId).emit('typing', { conversationId, userId });
+      }
+    });
+
     // Message bhejo
     socket.on('send_message', async (data) => {
       try {
         const { conversationId, text } = data || {};
         if (typeof text !== 'string' || !text.trim() || text.length > MAX_MESSAGE_LENGTH) return;
 
-        const convo = await Conversation.findById(conversationId);
-        if (!convo || !isParticipant(convo, userId)) return;
+        const conversation = await Conversation.findById(conversationId);
+        if (!conversation || !isParticipant(conversation, userId)) return;
 
-        const senderRole = convo.sponsorId.toString() === userId ? 'sponsor' : 'organizer';
-        const message = await Message.create({
-          conversationId, senderId: userId, senderRole, text
-        });
-
-        // Conversation ka lastMessage update karo
-        await Conversation.findByIdAndUpdate(conversationId, {
-          lastMessage: text,
-          updatedAt: Date.now()
-        });
-
-        const recipientId = senderRole === 'sponsor' ? convo.organizerId : convo.sponsorId;
-        // Global notification bhejo recipient ko
-        io.to(recipientId.toString()).emit('new_notification', {
-          conversationId,
-          eventId: convo.eventId,
+        await postMessage({
+          conversation,
+          senderId: userId,
+          senderRole: conversation.sponsorId.toString() === userId ? 'sponsor' : 'organizer',
           text
         });
-
-        // Dono users ko message milega (in-chat)
-        io.to(conversationId).emit('receive_message', message);
       } catch (err) {
         console.error("Socket error processing send_message:", err);
       }
-    });
-
-    socket.on('disconnect', () => {
-      console.log('User disconnected:', socket.id);
     });
   });
 };

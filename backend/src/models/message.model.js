@@ -14,9 +14,22 @@ const messageSchema=new mongoose.Schema({
         type:String,
         enum:['organizer','sponsor']
     },
+    // "deal" messages record offers and decisions in the conversation's timeline
+    kind:{
+        type:String,
+        enum:['text','deal'],
+        default:'text'
+    },
     text:{
        type:String,
-       required:true
+       trim:true,
+       default:''
+    },
+    attachment:{
+        url:{type:String},
+        name:{type:String},
+        type:{type:String},
+        size:{type:Number}
     },
     isRead:{
         type:Boolean,

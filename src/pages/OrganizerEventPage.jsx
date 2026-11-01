@@ -1,464 +1,350 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
+import { ArrowLeft, CalendarDays, Check, Inbox, MapPin, MessageCircle, MessagesSquare, Pencil, Repeat2, Trash2, X } from "lucide-react";
+import { EventCover } from "@/components/events/EventCard";
+import EventForm from "@/components/events/EventForm";
+import OfferHistory from "@/components/events/OfferHistory";
+import OfferModal from "@/components/events/OfferModal";
+import Button from "@/components/ui/Button";
+import { useConfirm } from "@/components/ui/Confirm";
+import { RatingSlider } from "@/components/ui/Field";
+import Modal, { ModalBody, ModalFooter } from "@/components/ui/Modal";
+import { Avatar, Badge, Card, EmptyState, ErrorState, PageSpinner, StatusBadge, Tabs } from "@/components/ui/Primitives";
+import { useAuth } from "@/context/AuthContext";
+import { useResource } from "@/hooks/useResource";
 import {
-  getOrganizerEventById,
-  getOrganizerEvents,
-  deleteEvent,
-  updateEvent,
-  backend,
-  fetchEventCategories,
-  fetchCities,
   confirmSponsorshipAsOrganizer,
+  counterAsOrganizer,
+  deleteEvent,
   getEventApplications,
+  getEventConversations,
+  getOrganizerEventById,
+  startConversation,
   updateApplicationStatus,
 } from "@/lib/api";
-import { APPLICATION_STATUS_CLASS, fmtINR, getErrorMessage, resolveMediaUrl } from "@/lib/utils";
-import ChatBox from "@/components/ChatBox";
-import { useAuth } from "@/context/AuthContext";
+import { fmtDate, fmtINR, getErrorMessage, rupees, titleCase } from "@/lib/utils";
 
-const cx = (...xs) => xs.filter(Boolean).join(" ");
-const STATUS_CLASS = {
-  upcoming: "status-chip status-upcoming",
-  completed: "status-chip status-completed",
-  cancelled: "status-chip status-cancelled",
-};
-
-const PLATFORMS = ["instagram", "youtube", "twitter", "facebook", "linkedin", "other"];
-
-function Metric({ label, value }) {
+function Fact({ label, value }) {
   return (
-    <div className="soft-card !p-4">
-      <div className="field-label !mb-1 text-[10px]">{label}</div>
-      <div className="text-2xl font-black">{value ?? "—"}</div>
+    <div>
+      <dt className="text-sm text-ink-soft">{label}</dt>
+      <dd className="mt-0.5 font-display text-xl font-bold">{value}</dd>
     </div>
   );
 }
 
-function SocialRows({ initial }) {
-  const [rows, setRows] = useState(() => initial?.length ? initial.map((item, index) => ({ id: index + 1, ...item })) : [{ id: 1, platform: "instagram", link: "", followers: "" }]);
+function ConfirmDealModal({ application, eventId, onClose, onDone }) {
+  const [rating, setRating] = useState(0.7);
+  const [saving, setSaving] = useState(false);
+  const brand = application?.brand?.brandName || application?.sponsor?.username || "this sponsor";
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      await confirmSponsorshipAsOrganizer(eventId, application._id, rating);
+      toast.success("Sponsorship confirmed");
+      onDone();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+    setSaving(false);
+  };
 
   return (
-    <div className="md:col-span-2">
-      <div className="flex items-center justify-between mb-3">
-        <label className="field-label !mb-0">Social media accounts</label>
-        <button type="button" className="font-bold text-[var(--accent)]" onClick={() => setRows((prev) => [...prev, { id: Date.now(), platform: "instagram", link: "", followers: "" }])}>+ Add</button>
-      </div>
-      <div className="space-y-3">
-        {rows.map((row) => (
-          <div key={row.id} className="grid grid-cols-[120px_1fr_130px_40px] gap-3 items-center">
-            <select value={row.platform} onChange={(e) => setRows((prev) => prev.map((item) => item.id === row.id ? { ...item, platform: e.target.value } : item))} className="select-field">
-              {PLATFORMS.map((platform) => <option key={platform} value={platform}>{platform}</option>)}
-            </select>
-            <input value={row.link} onChange={(e) => setRows((prev) => prev.map((item) => item.id === row.id ? { ...item, link: e.target.value } : item))} className="input-field" placeholder="Profile URL" />
-            <input value={row.followers} onChange={(e) => setRows((prev) => prev.map((item) => item.id === row.id ? { ...item, followers: e.target.value } : item))} className="input-field" type="number" min="0" placeholder="Followers" />
-            <button type="button" className="btn-danger !p-0 !h-11 !rounded-2xl" onClick={() => setRows((prev) => prev.filter((item) => item.id !== row.id))}>×</button>
-          </div>
-        ))}
-      </div>
-      <input type="hidden" name="socialMediaAccount" value={JSON.stringify(rows.filter((row) => row.link).map((row) => ({ platform: row.platform, link: row.link, followers: Number(row.followers) || 0 })))} />
-    </div>
+    <Modal open={Boolean(application)} onClose={onClose} size="sm" title="Confirm sponsorship" description={`Did the sponsorship with ${brand} really happen?`}>
+      <ModalBody>
+        <RatingSlider
+          label="How well did the brand show up?"
+          hint="Think about their stall, branding and team at the event. This helps with their future predictions."
+          value={rating}
+          onChange={setRating}
+        />
+      </ModalBody>
+      <ModalFooter>
+        <Button variant="secondary" onClick={onClose}>Not yet</Button>
+        <Button loading={saving} onClick={submit}>Yes, it happened</Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 
-function EventForm({ event, categories, cities, onSubmit, onClose, submitting }) {
+function ApplicationRow({ application, eventDone, deciding, onDecide, onCounter, onConfirm, onChat }) {
+  const offer = application.negotiations?.at(-1);
+  const open = ["pending", "negotiating"].includes(application.status) && !eventDone;
+  const myTurn = open && offer?.from === "sponsor";
+  const name = application.brand?.brandName || application.sponsor?.username || "Sponsor";
+  const bothConfirmed = application.organizerConfirmedAt && application.sponsorConfirmedAt;
+
   return (
-    <div className="modal-overlay">
-      <div className="modal-card animate-fade-up">
-        <div className="modal-header">
-          <div>
-            <h3 className="text-3xl font-black">{event ? "Edit Event" : "Create Event"}</h3>
-            <p className="muted mt-1">Configure your event metrics and sponsorship details.</p>
+    <li className="p-4 sm:p-5">
+      <div className="flex flex-wrap items-start gap-3">
+        <Avatar name={name} src={application.brand?.logo} className="h-11 w-11" />
+        <div className="min-w-0 flex-1 basis-48">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-semibold">{name}</h3>
+            <StatusBadge status={application.status} />
           </div>
-          <button type="button" className="btn-secondary" onClick={onClose}>Close</button>
+          <p className="mt-0.5 font-display text-lg font-bold text-brand">
+            {rupees(application.status === "accepted" ? application.finalAmount : offer?.amount)}
+          </p>
+          {application.brand?.brandType?.name ? <p className="text-sm text-ink-faint">{titleCase(application.brand.brandType.name)}</p> : null}
+          {open && !myTurn ? <p className="text-sm text-ink-soft">You countered. Waiting for the sponsor.</p> : null}
+          {offer?.message ? <p className="mt-2 rounded-xl bg-paper p-3 text-sm text-ink-soft">{offer.message}</p> : null}
+          <OfferHistory negotiations={application.negotiations} viewer="organizer" className="mt-2" />
         </div>
-
-        <form onSubmit={onSubmit} className="space-y-6" encType="multipart/form-data">
-          <div className="modal-section-grid">
-            <div>
-              <label className="field-label">Event name</label>
-              <input name="eventName" defaultValue={event?.eventName || ""} required className="input-field" />
-            </div>
-            <div>
-              <label className="field-label">Category</label>
-              <select name="eventCategory" defaultValue={event?.eventCategory?._id || event?.eventCategory || ""} required className="select-field">
-                <option value="">Select category</option>
-                {categories.map((cat) => <option key={cat._id} value={cat._id}>{cat.name}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div>
-             <label className="field-label">Description</label>
-             <textarea name="eventDescription" defaultValue={event?.eventDescription || ""} rows={3} required className="textarea-field" />
-          </div>
-
-          <div className="modal-section-grid">
-            <div>
-              <label className="field-label">City / location</label>
-              <select name="location" defaultValue={event?.location || ""} required className="select-field">
-                <option value="">Select city</option>
-                {cities.map((city) => <option key={city._id} value={city.name}>{city.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="field-label">Event date</label>
-              <input name="date" type="date" defaultValue={event?.date ? new Date(event.date).toISOString().slice(0, 10) : ""} required className="input-field" />
-            </div>
-          </div>
-
-          <div className="modal-section-grid">
-             <div>
-                <label className="field-label">Capacity</label>
-                <input name="capacity" type="number" min="1" defaultValue={event?.capacity || ""} required className="input-field" />
-             </div>
-             <div>
-                <label className="field-label">Ask (₹)</label>
-                <input name="ask" type="number" min="0" defaultValue={event?.ask || ""} required className="input-field" />
-             </div>
-          </div>
-
-          <div className="modal-section-grid">
-             <div>
-                <label className="field-label">Ticket Price (₹)</label>
-                <input name="ticketPrice" type="number" min="0" defaultValue={event?.ticketPrice || 0} className="input-field" />
-             </div>
-             <div>
-                <label className="field-label">Marketing Budget (₹)</label>
-                <input name="marketingBudget" type="number" min="0" defaultValue={event?.marketingBudget || 0} className="input-field" />
-             </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input name="isIndoor" type="checkbox" defaultChecked={Boolean(event?.isIndoor)} className="w-5 h-5 accent-[var(--accent)]" id="indoor-check" />
-            <label htmlFor="indoor-check" className="text-sm font-bold opacity-70">Indoor event</label>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <input name="isFestive" type="checkbox" defaultChecked={Boolean(event?.isFestive)} className="w-5 h-5 accent-[var(--accent)]" id="festive-check" />
-            <label htmlFor="festive-check" className="text-sm font-bold opacity-70">Falls during a festival</label>
-          </div>
-
-          <SocialRows initial={event?.socialMediaAccount} />
-
-          <div>
-            <label className="field-label">Thumbnail</label>
-            <input name="thumbnail" type="file" accept="image/*" className="input-field" />
-          </div>
-
-          <button type="submit" disabled={submitting} className="btn-primary w-full py-4">
-            {submitting ? "Saving..." : event ? "Save changes" : "Create event"}
-          </button>
-        </form>
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+          {application.status !== "withdrawn" ? (
+            <Button variant="ghost" size="sm" onClick={() => onChat(application.sponsor?._id)}>
+              <MessageCircle className="h-4 w-4" aria-hidden="true" />Message
+            </Button>
+          ) : null}
+          {open ? (
+            <Button variant="danger-soft" size="sm" disabled={deciding} onClick={() => onDecide(application, "rejected")}>
+              <X className="h-4 w-4" aria-hidden="true" />Reject
+            </Button>
+          ) : null}
+          {myTurn ? (
+            <>
+              <Button variant="secondary" size="sm" disabled={deciding} onClick={() => onCounter(application)}>
+                <Repeat2 className="h-4 w-4" aria-hidden="true" />Counter
+              </Button>
+              <Button size="sm" disabled={deciding} onClick={() => onDecide(application, "accepted")}>
+                <Check className="h-4 w-4" aria-hidden="true" />Accept
+              </Button>
+            </>
+          ) : null}
+          {application.status === "accepted" && eventDone && !application.organizerConfirmedAt ? (
+            <Button size="sm" onClick={() => onConfirm(application)}>Confirm sponsorship</Button>
+          ) : null}
+        </div>
       </div>
-    </div>
+      {application.status === "accepted" && eventDone ? (
+        <p className="mt-3 text-sm text-ink-soft sm:pl-14">
+          {bothConfirmed
+            ? "Confirmed by both sides."
+            : application.organizerConfirmedAt ? "You confirmed. Waiting for the sponsor." : application.sponsorConfirmedAt ? "The sponsor confirmed. It's your turn." : "Waiting for both sides to confirm."}
+        </p>
+      ) : null}
+    </li>
   );
 }
 
 export default function OrganizerEventPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const { user } = useAuth();
-  const [detail, setDetail] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [modalMode, setModalMode] = useState(null);
-  const [categories, setCategories] = useState([]);
-  const [cities, setCities] = useState([]);
-  const [activeChatSponsor, setActiveChatSponsor] = useState(null);
-  const [eventConversations, setEventConversations] = useState([]);
-  const [unreadCounts, setUnreadCounts] = useState({});
-  const [applications, setApplications] = useState([]);
+  const navigate = useNavigate();
+  const confirm = useConfirm();
+  const [tab, setTab] = useState("offers");
+  const [editing, setEditing] = useState(false);
   const [decidingId, setDecidingId] = useState(null);
-  const [activationRatings, setActivationRatings] = useState({});
+  const [confirming, setConfirming] = useState(null);
+  const [countering, setCountering] = useState(null);
 
-  const DEFAULT_RATINGS = { organizerReputation: 0.5, lineupQuality: 0.55, activationMaturity: 0.5 };
+  const event = useResource(() => getOrganizerEventById(id).then((res) => res.data), [id]);
+  const applications = useResource(() => getEventApplications(id).then((res) => res.data), [id]);
+  const conversations = useResource(() => getEventConversations(id), [id]);
 
-  const loadData = async () => {
-    setLoading(true);
+  if (event.loading) return <PageSpinner label="Loading event…" />;
+  if (event.error) return <Card><ErrorState error={event.error} onRetry={event.reload} /></Card>;
+
+  const detail = event.data;
+  const eventDone = detail.status === "completed";
+  const offers = applications.data || [];
+  const inbox = conversations.data || [];
+  const hasAccepted = offers.some((item) => item.status === "accepted");
+
+  const handleDecide = async (application, status) => {
+    const accepting = status === "accepted";
+    const brand = application.brand?.brandName || "this sponsor";
+    const yes = await confirm({
+      title: accepting ? `Accept ${brand}?` : `Reject ${brand}?`,
+      message: accepting
+        ? "This locks the event's date and city, because the sponsor agreed to them. You can't undo this."
+        : "They'll see this offer was rejected. You can't undo this.",
+      confirmLabel: accepting ? "Accept offer" : "Reject offer",
+      danger: !accepting,
+    });
+    if (!yes) return;
+
+    setDecidingId(application._id);
     try {
-      const detailRes = await getOrganizerEventById(id);
-      const payload = detailRes?.data || detailRes;
-      setDetail(payload);
-
-      const [catRes, cityRes, convRes, appRes] = await Promise.all([
-        fetchEventCategories(),
-        fetchCities(),
-        backend.get(`/chat/event/${id}`).catch(() => ({ data: [] })),
-        getEventApplications(id).catch((err) => {
-          toast.error(getErrorMessage(err));
-          return null;
-        })
-      ]);
-      setDetail(payload);
-      setCategories(catRes);
-      setCities(cityRes);
-      setEventConversations(convRes?.data || []);
-      setApplications(appRes?.data || []);
+      await updateApplicationStatus(id, application._id, status);
+      toast.success(accepting ? "Offer accepted" : "Offer rejected");
+      applications.reload();
     } catch (err) {
       toast.error(getErrorMessage(err));
-      navigate(-1);
     }
-    setLoading(false);
+    setDecidingId(null);
   };
 
-  useEffect(() => {
-    if (id) loadData();
-  }, [id]);
+  const handleCounter = async (offer) => {
+    try {
+      await counterAsOrganizer(id, countering._id, offer);
+      toast.success("Counter-offer sent");
+      setCountering(null);
+      applications.reload();
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  const openChat = async (sponsorId) => {
+    try {
+      const conversation = await startConversation({ eventId: id, sponsorId, organizerId: user._id });
+      navigate(`/messages/${conversation._id}`);
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    }
+  };
 
   const handleDelete = async () => {
-    if (!window.confirm("Delete this event?")) return;
+    const yes = await confirm({
+      title: "Delete this event?",
+      message: "Sponsors won't be able to see it, and pending offers will be rejected.",
+      confirmLabel: "Delete event",
+      danger: true,
+    });
+    if (!yes) return;
     try {
       await deleteEvent(id);
       toast.success("Event deleted");
-      navigate(-1);
+      navigate("/");
     } catch (err) {
       toast.error(getErrorMessage(err));
     }
   };
 
-  const handleConfirmDeal = async (application) => {
-    setDecidingId(application._id);
-    try {
-      const res = await confirmSponsorshipAsOrganizer(id, application._id, activationRatings[application._id] ?? 0.5);
-      const { organizerConfirmedAt } = res.data;
-      setApplications((prev) => prev.map((item) => item._id === application._id ? { ...item, organizerConfirmedAt } : item));
-      toast.success("Sponsorship confirmed");
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    }
-    setDecidingId(null);
-  };
-
-  const handleDecision = async (application, status) => {
-    const verb = status === "accepted" ? "Accept" : "Reject";
-    if (!window.confirm(`${verb} this application? This cannot be changed later.`)) return;
-    setDecidingId(application._id);
-    try {
-      const res = await updateApplicationStatus(id, application._id, status);
-      const { status: nextStatus, finalAmount } = res.data;
-      setApplications((prev) => prev.map((item) => item._id === application._id ? { ...item, status: nextStatus, finalAmount } : item));
-      toast.success(`Application ${status}`);
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    }
-    setDecidingId(null);
-  };
-
-  const submitForm = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    const rawForm = e.currentTarget;
-    const form = new FormData();
-    const fields = ["eventName", "eventCategory", "eventDescription", "location", "capacity", "date", "ask", "ticketPrice", "marketingBudget", "socialMediaAccount"];
-    fields.forEach(f => {
-      const val = rawForm.elements[f]?.value;
-      if (val !== undefined) form.append(f, val);
-    });
-    if (rawForm.elements.isIndoor) form.append("isIndoor", rawForm.elements.isIndoor.checked);
-    if (rawForm.elements.isFestive) form.append("isFestive", rawForm.elements.isFestive.checked);
-    if (rawForm.elements.thumbnail?.files?.[0]) {
-      form.append("thumbnail", rawForm.elements.thumbnail.files[0]);
-    }
-    form.append("_v", Date.now()); // Ensure body is never empty
-    try {
-      await updateEvent(id, form);
-      toast.success("Event updated");
-      setModalMode(null);
-      loadData();
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    }
-    setSubmitting(false);
-  };
-
-  const qualityMetrics = useMemo(() => {
-    if (!detail) return {};
-    const withFeedback = Boolean(detail.totalFeedbacks && detail.totalFeedbacks > 0);
-    const r = (v) => parseFloat(v.toFixed(2));
-    return {
-      avgOrganizerReputation: r(detail.avgOrganizerReputation || DEFAULT_RATINGS.organizerReputation),
-      avgLineupQuality: r(detail.avgLineupQuality || DEFAULT_RATINGS.lineupQuality),
-      totalFeedbacks: detail.totalFeedbacks || 0,
-    };
-  }, [detail]);
-
-  if (loading) return <div className="text-center py-20 muted">Loading event management...</div>;
-  if (!detail) return null;
-
-  const isUpcoming = detail.status === "upcoming" || new Date(detail.date) >= new Date();
+  const socialReach = (detail.socialMediaAccount || []).reduce((sum, item) => sum + (item.followers || 0), 0);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3 mb-2">
-         <button onClick={() => navigate(-1)} className="btn-secondary !py-2 !px-4">← Back to dashboard</button>
-      </div>
+    <>
+      <Link to="/" className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-ink">
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />Dashboard
+      </Link>
 
-      <section className="workspace-panel space-y-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex gap-5 min-w-0">
-            <img src={resolveMediaUrl(detail.thumbnail) || "https://placehold.co/360x240?text=Event"} alt={detail.eventName} className="w-44 h-32 rounded-3xl object-cover flex-shrink-0" />
+      <Card className="overflow-hidden">
+        <EventCover event={detail} className="h-40 w-full sm:h-56" />
+        <div className="p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-3 mb-3">
-                <h3 className="text-5xl font-black leading-none">{detail.eventName}</h3>
-                <span className={STATUS_CLASS[detail.status || (isUpcoming ? "upcoming" : "completed")] || STATUS_CLASS.upcoming}>
-                  {detail.status || (isUpcoming ? "upcoming" : "completed")}
-                </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge status={detail.status} />
+                <Badge>{titleCase(detail.eventCategory?.name)}</Badge>
               </div>
-              <p className="section-subtitle text-lg leading-8 max-w-3xl">{detail.eventDescription}</p>
-              <div className="flex flex-wrap gap-2 mt-4">
-                <span className="info-chip">{detail.eventCategory?.name || "Event"}</span>
-                <span className="info-chip">{detail.location}</span>
-                <span className="info-chip">{new Date(detail.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
-                <span className="info-chip">{detail.isIndoor ? "Indoor" : "Outdoor"}</span>
+              <h1 className="mt-2 text-3xl font-bold">{detail.eventName}</h1>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-ink-soft">
+                <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4" aria-hidden="true" />{detail.location}</span>
+                <span className="flex items-center gap-1.5"><CalendarDays className="h-4 w-4" aria-hidden="true" />{fmtDate(detail.date)}</span>
               </div>
+            </div>
+            <div className="flex gap-2">
+              {!eventDone ? (
+                <Button variant="secondary" onClick={() => setEditing(true)}><Pencil className="h-4 w-4" aria-hidden="true" />Edit</Button>
+              ) : null}
+              {!hasAccepted ? (
+                <Button variant="danger-soft" aria-label="Delete event" onClick={handleDelete}><Trash2 className="h-4 w-4" aria-hidden="true" /></Button>
+              ) : null}
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-             {detail.status === "upcoming" ? (
-               <button className="btn-primary" onClick={() => setModalMode("edit")}>Edit event</button>
-             ) : null}
-             <button className="btn-danger" style={{ background: "rgba(239, 68, 68, 0.08)", color: "#dc2626" }} onClick={handleDelete}>Delete event</button>
-          </div>
+          <p className="mt-4 max-w-3xl whitespace-pre-line text-ink-soft">{detail.eventDescription}</p>
+
+          <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-line pt-5 md:grid-cols-4">
+            <Fact label="Sponsorship ask" value={rupees(detail.ask)} />
+            <Fact label="Capacity" value={fmtINR(detail.capacity)} />
+            <Fact label="Ticket price" value={detail.ticketPrice ? rupees(detail.ticketPrice) : "Free"} />
+            <Fact label="Social reach" value={fmtINR(socialReach)} />
+          </dl>
         </div>
+      </Card>
 
-        <div className="grid xl:grid-cols-[1fr_auto] gap-6 items-start">
-           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <Metric label="Ask" value={`₹${fmtINR(detail.ask)}`} />
-              <Metric label="Ticket price" value={`₹${fmtINR(detail.ticketPrice)}`} />
-              <Metric label="Capacity" value={detail.capacity} />
-              <Metric label="Marketing budget" value={`₹${fmtINR(detail.marketingBudget)}`} />
-           </div>
+      <section className="mt-6">
+        <Tabs
+          className="mb-4"
+          label="Event sections"
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { id: "offers", label: "Offers", count: offers.length },
+            { id: "messages", label: "Messages", count: inbox.length },
+          ]}
+        />
 
-           <div className="surface-card min-w-[320px]">
-              <div className="field-label">Quality signals</div>
-              <div className="grid gap-4 mt-4">
-                {[
-                  ["Organizer reputation", qualityMetrics.avgOrganizerReputation],
-                  ["Lineup quality", qualityMetrics.avgLineupQuality],
-                ].map(([label, val]) => (
-                  <div key={label}>
-                    <div className="flex justify-between text-xs font-bold mb-2">
-                       <span className="muted uppercase tracking-wider">{label}</span>
-                       <span>{Number(val).toFixed(2)}</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-[var(--bg-soft)] rounded-full overflow-hidden">
-                       <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.min(100, val * 100)}%` }} />
-                    </div>
-                  </div>
+        {tab === "offers" ? (
+          <Card>
+            {applications.error ? <ErrorState error={applications.error} onRetry={applications.reload} /> : null}
+            {!applications.error && offers.length === 0 ? (
+              <EmptyState icon={Inbox} title={applications.loading ? "Loading offers…" : "No offers yet"} description={applications.loading ? null : "When a sponsor applies to this event, you'll see it here."} />
+            ) : null}
+            {offers.length > 0 ? (
+              <ul className="divide-y divide-line">
+                {offers.map((application) => (
+                  <ApplicationRow
+                    key={application._id}
+                    application={application}
+                    eventDone={eventDone}
+                    deciding={decidingId === application._id}
+                    onDecide={handleDecide}
+                    onCounter={setCountering}
+                    onConfirm={setConfirming}
+                    onChat={openChat}
+                  />
                 ))}
-              </div>
-              <div className="faint text-[10px] mt-6 uppercase tracking-wider font-extrabold">
-                Based on {qualityMetrics.totalFeedbacks} sponsorship verdicts
-              </div>
-           </div>
-        </div>
-
-        {Array.isArray(detail.socialMediaAccount) && detail.socialMediaAccount.length ? (
-          <div className="surface-card">
-            <div className="field-label mb-4">Confirmed social reach</div>
-            <div className="flex flex-wrap gap-3">
-              {detail.socialMediaAccount.map((acc, i) => (
-                <div key={i} className="soft-card !py-3 !px-5 flex items-center gap-4 min-w-[240px]">
-                   <div className="font-bold capitalize">{acc.platform}</div>
-                   <div className="h-4 w-[1px] bg-[var(--line)]" />
-                   <div className="text-[var(--accent)] font-black">{fmtINR(acc.followers)} reach</div>
-                </div>
-              ))}
-            </div>
-          </div>
+              </ul>
+            ) : null}
+          </Card>
         ) : null}
 
-        <div className="surface-card">
-           <div className="field-label mb-4">Sponsorship applications</div>
-           {applications.length === 0 ? (
-             <p className="muted py-10 text-center">No sponsors have applied to this event yet.</p>
-           ) : (
-             <div className="space-y-3">
-                {applications.map(application => {
-                  const offer = application.negotiations?.[application.negotiations.length - 1];
-                  return (
-                    <div key={application._id} className="soft-card !py-4 !px-5 flex flex-wrap items-center gap-4">
-                      <img src={resolveMediaUrl(application.brand?.logo) || "https://placehold.co/96x96?text=Brand"} alt="" className="w-12 h-12 rounded-2xl object-cover flex-shrink-0" />
-                      <div className="flex-1 min-w-[220px]">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-lg font-black capitalize">{application.brand?.brandName || application.sponsor?.username || "Sponsor"}</span>
-                          {application.brand?.brandType?.name ? <span className="info-chip !py-1">{application.brand.brandType.name}</span> : null}
-                        </div>
-                        <div className="text-[var(--accent)] font-black mt-1">₹{fmtINR(offer?.amount)} offered</div>
-                        {offer?.message ? <p className="muted text-sm mt-1 leading-6 break-words">{offer.message}</p> : null}
-                      </div>
-                      {application.status === "pending" ? (
-                        <div className="flex gap-2">
-                          <button className="btn-primary !py-2 !px-4 !text-xs" disabled={decidingId === application._id} onClick={() => handleDecision(application, "accepted")}>Accept</button>
-                          <button className="btn-danger !py-2 !px-4 !text-xs" disabled={decidingId === application._id} onClick={() => handleDecision(application, "rejected")}>Reject</button>
-                        </div>
-                      ) : application.status === "accepted" && detail.status === "completed" && !application.organizerConfirmedAt ? (
-                        <div className="flex flex-wrap items-center gap-3">
-                          <label className="text-xs font-bold muted">
-                            Brand activation: {(activationRatings[application._id] ?? 0.5).toFixed(2)}
-                            <input
-                              type="range" min="0" max="1" step="0.01"
-                              value={activationRatings[application._id] ?? 0.5}
-                              onChange={(e) => setActivationRatings((prev) => ({ ...prev, [application._id]: Number(e.target.value) }))}
-                              className="block w-36 accent-[var(--accent)]"
-                            />
-                          </label>
-                          <button className="btn-primary !py-2 !px-4 !text-xs" disabled={decidingId === application._id} onClick={() => handleConfirmDeal(application)}>Confirm sponsorship happened</button>
-                        </div>
-                      ) : (
-                        <span className={APPLICATION_STATUS_CLASS[application.status] || APPLICATION_STATUS_CLASS.pending}>
-                          {application.status}{application.organizerConfirmedAt ? (application.sponsorConfirmedAt ? " · confirmed by both" : " · waiting for sponsor") : ""}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-             </div>
-           )}
-        </div>
-
-        <div className="surface-card">
-           <div className="field-label mb-4">Sponsor inquiries</div>
-           {eventConversations.length === 0 ? (
-             <p className="muted py-10 text-center">No sponsors have contacted you for this event yet.</p>
-           ) : (
-             <div className="flex flex-wrap gap-3">
-                {eventConversations.map(conv => (
-                  <div key={conv._id} className="soft-card !py-3 !px-5 flex items-center gap-6 min-w-[300px]">
-                    <div className="flex-1">
-                      <div className="text-lg font-black">{conv.sponsorId?.username || "Sponsor"}</div>
-                      <div className="muted text-xs truncate max-w-[180px]">{conv.lastMessage || "Opening inquiry..."}</div>
-                    </div>
-                    <button className="btn-secondary !py-2 !px-4 !text-xs" onClick={() => setActiveChatSponsor(conv.sponsorId?._id)}>Open Chat</button>
-                  </div>
+        {tab === "messages" ? (
+          <Card>
+            {inbox.length === 0 ? (
+              <EmptyState icon={MessagesSquare} title="No messages yet" description="When a sponsor messages you about this event, it'll appear here." />
+            ) : (
+              <ul className="divide-y divide-line">
+                {inbox.map((conversation) => (
+                  <li key={conversation._id}>
+                    <Link to={`/messages/${conversation._id}`} className="flex w-full items-center gap-3 p-4 text-left transition hover:bg-paper">
+                      <Avatar name={conversation.sponsorId?.username} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-semibold">{conversation.sponsorId?.username || "Deleted user"}</span>
+                        <span className="block truncate text-sm text-ink-soft">{conversation.lastMessage || "No messages yet"}</span>
+                      </span>
+                    </Link>
+                  </li>
                 ))}
-             </div>
-           )}
-        </div>
+              </ul>
+            )}
+          </Card>
+        ) : null}
       </section>
 
-      {activeChatSponsor && (
-        <ChatBox
-          eventId={id}
-          sponsorId={activeChatSponsor}
-          organizerId={user?._id}
-          currentUserRole="organizer"
-          onClose={() => setActiveChatSponsor(null)}
-        />
-      )}
+      <EventForm
+        open={editing}
+        event={detail}
+        onClose={() => setEditing(false)}
+        onSaved={() => {
+          setEditing(false);
+          event.reload();
+        }}
+      />
 
-      {modalMode && (
-        <EventForm
-          event={modalMode === "edit" ? detail : null}
-          categories={categories}
-          cities={cities}
-          onSubmit={submitForm}
-          onClose={() => setModalMode(null)}
-          submitting={submitting}
-        />
-      )}
-    </div>
+      <ConfirmDealModal
+        application={confirming}
+        eventId={id}
+        onClose={() => setConfirming(null)}
+        onDone={() => {
+          setConfirming(null);
+          applications.reload();
+        }}
+      />
+
+      <OfferModal
+        open={Boolean(countering)}
+        currentAmount={countering?.negotiations?.at(-1)?.amount}
+        onClose={() => setCountering(null)}
+        onSubmit={handleCounter}
+      />
+    </>
   );
 }
