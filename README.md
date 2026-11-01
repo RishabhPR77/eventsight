@@ -3,6 +3,8 @@
 > **Undergraduate Research Project** · Madhav Institute of Technology and Science, Gwalior  
 > Built by **Rishabh Patidar** (ML Engineer / Data Scientist) & **Sujal Hammad** (Backend Developer)
 
+**Live site: https://sponsorwise.vercel.app**
+
 SponsorWise is a full-stack AI-powered platform that helps event organizers in Madhya Pradesh find the right sponsors - and helps sponsors evaluate whether an event is worth their money. At its core is a two-stage XGBoost pipeline that predicts event attendance and sponsorship acceptance probability, augmented by LLM-generated insights, negotiation strategies, and cold outreach emails.
 
 ---
@@ -19,6 +21,7 @@ SponsorWise is a full-stack AI-powered platform that helps event organizers in M
 - [Dataset](#dataset)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
+- [Deployment](#deployment)
 - [Team](#team)
 
 ---
@@ -49,7 +52,7 @@ SponsorWise solves this by acting as an intelligent matchmaker - giving organize
 │   Backend (Sujal)        │    │   (Real-time Chat)  │
 │   MongoDB + Mongoose     │    └─────────────────────┘
 │   JWT + OTP Auth         │
-│   Cloudinary + Nodemailer│
+│   Cloudinary + Brevo     │
 └──────────────┬───────────┘
                │ HTTP (X-API-Key)
                ▼
@@ -69,11 +72,11 @@ SponsorWise solves this by acting as an intelligent matchmaker - giving organize
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | React 19, Vite, Tailwind CSS, React Router v7, Socket.io-client, Axios |
-| **Backend** | Node.js, Express 5, MongoDB, Mongoose, JWT, bcryptjs, Nodemailer, Multer, Cloudinary, Socket.io, node-cron |
+| **Frontend** | React 19, Vite, Tailwind CSS, React Router v7, Socket.io-client, Axios, lucide-react |
+| **Backend** | Node.js, Express 5, MongoDB, Mongoose, JWT, bcryptjs, zod, helmet, express-rate-limit, Multer, Cloudinary, Brevo, Socket.io, node-cron |
 | **ML Service** | Python, FastAPI, XGBoost, scikit-learn, pandas, NumPy, Groq SDK, joblib, Pydantic v2, Uvicorn |
 | **LLM** | Groq API - `openai/gpt-oss-120b` |
-| **Infra** | Vercel (frontend), environment-configurable origins for backend and ML |
+| **Hosting** | Vercel (frontend), Render (backend and ML service), MongoDB Atlas (database), all on free plans |
 
 ---
 
@@ -83,46 +86,53 @@ SponsorWise solves this by acting as an intelligent matchmaker - giving organize
 SponsorWise/
 ├── src/                        # React frontend (joint work)
 │   ├── components/
-│   │   ├── ui/                 # Reusable UI: Card, Badge, Button, Stat, Separator
-│   │   ├── layout/             # AppShell, TopNav, BrandPanel
-│   │   ├── results/            # AiInsightsPanel, RecommendationsPanel,
-│   │   │                       # ExecutiveSummary, OutreachPanel,
-│   │   │                       # NegotiationPanel, ResultsPanel
-│   │   ├── deal/               # DealPanel, OrganizerInputs
-│   │   └── ChatBox.jsx         # Real-time sponsor↔organizer chat
-│   ├── pages/                  # AuthGate, DashboardSwitch, OrganizerDashboard,
-│   │                           # SponsorDashboard, SponsorWisePage,
-│   │                           # SponsorAnalysisPage, OrganizerEventPage,
-│   │                           # SponsorEventPage, AdminPage,
-│   │                           # RegisterPage, VerifyOtpPage,
-│   │                           # ForgotPasswordPage, ResetPasswordPage, SettingsPage
-│   ├── context/                # AuthContext, ThemeContext
-│   └── lib/                    # api.js, mlMappings.js, utils.js
+│   │   ├── ui/                 # Button, Field, Modal, Confirm, Logo, Primitives,
+│   │   │                       # ImageField, OtpInput, ErrorBoundary
+│   │   ├── layout/             # AppShell, AuthLayout, MarketingLayout,
+│   │   │                       # NotificationBell, WakeBanner
+│   │   ├── events/             # EventCard, EventForm, DealProgress, OfferModal,
+│   │   │                       # OfferHistory, CancelDealModal
+│   │   ├── results/            # ResultsPanel, VerdictRing
+│   │   ├── brand/              # BrandForm
+│   │   ├── chat/               # ChatThread
+│   │   └── demo/               # ProductDemo, the animated cursor walkthrough
+│   ├── pages/                  # One file per route
+│   ├── context/                # AuthContext, RealtimeContext
+│   ├── hooks/                  # useResource, usePagedList
+│   └── lib/                    # api, labels, mlMappings, session, utils
 │
 ├── backend/                    # Node.js REST + WebSocket server (Sujal)
 │   └── src/
-│       ├── controllers/        # auth, organizer, sponsor, admin
-│       ├── models/             # User, Organizer, Sponsor, OTP, Conversation,
-│       │                       # Message, EventCategory, EventFeedBack,
-│       │                       # SponsorApplication, City, SponsorBrandTypes
-│       ├── routes/             # auth, organizer, sponsor, admin, chat
-│       ├── middleware/         # auth, admin, role-check, multer
+│       ├── config/             # Checks required environment variables at startup
+│       ├── controllers/        # auth, organizer, sponsor, application, admin, ml
+│       ├── models/             # User, Organizer, Sponsor, SponsorApplication,
+│       │                       # Prediction, Notification, Conversation, Message,
+│       │                       # OTP, EventCategory, EventFeedBack, City,
+│       │                       # SponsorBrandTypes, Admin
+│       ├── routes/             # auth, organizer, sponsor, admin, chat, ml,
+│       │                       # notification
+│       ├── middleware/         # auth, admin, role check, multer, validation,
+│       │                       # rate limits, trusted origin, errors
+│       ├── validators/         # zod schemas
 │       ├── socket/             # chatSocket.js - real-time messaging
-│       ├── jobs/               # eventExpiry.job.js - cron auto-expiry
-│       ├── utility/            # ApiError, ApiResponse, AsyncHandler,
-│       │                       # cloudinary, sendEmail, mlInputMapper
+│       ├── jobs/               # eventExpiry and dealResolution cron jobs
+│       ├── utility/            # cloudinary, sendEmail, emailTemplates, notifier,
+│       │                       # chatService, dealRules, mlClient and helpers
 │       └── db/                 # MongoDB connection
 │
-└── ml-service/                 # FastAPI ML microservice (Rishabh)
-    ├── main.py                 # Full pipeline - predictions + AI insights
-    ├── train.ipynb             # Model training notebook
-    ├── preprocess.ipynb        # Data preprocessing notebook
-    ├── mp_sponsorwise_dataset.csv      # Raw synthetic dataset (~70k rows)
-    ├── mp_sponsorwise_ml_features.csv  # Engineered feature set
-    ├── feature_scaler.pkl              # Fitted StandardScaler (67 features)
-    ├── stage1_attendance_xgboost.pkl   # Attendance prediction model
-    ├── stage2_sponsor_xgboost.pkl      # Sponsorship acceptance classifier
-    └── requirements.txt
+├── ml-service/                 # FastAPI ML microservice (Rishabh)
+│   ├── main.py                 # Full pipeline - predictions + AI insights
+│   ├── train.ipynb             # Model training notebook
+│   ├── preprocess.ipynb        # Data preprocessing notebook
+│   ├── mp_sponsorwise_dataset.csv      # Raw synthetic dataset (~70k rows)
+│   ├── mp_sponsorwise_ml_features.csv  # Engineered feature set
+│   ├── feature_scaler.pkl              # Fitted StandardScaler (67 features)
+│   ├── stage1_attendance_xgboost.pkl   # Attendance prediction model
+│   ├── stage2_sponsor_xgboost.pkl      # Sponsorship acceptance classifier
+│   └── requirements.txt
+│
+├── render.yaml                 # Render Blueprint for the backend and ML service
+└── vercel.json                 # Sends every path to the React app
 ```
 
 ---
@@ -212,16 +222,16 @@ A Node.js + Express REST API that manages all application data, user authenticat
 ### Features
 
 **Authentication & Users**
-- Role-based accounts: `organizer`, `sponsor`, `admin`
+- Role-based accounts: `organizer`, `sponsor`, `admin`; the role comes from the landing page the visitor chose
 - OTP-based email verification on registration (5-minute expiry, 5 attempts per code)
 - JWT access + refresh token pair, stored in HTTP-only cookies
 - Forgot password / reset password via OTP email flow
 - bcryptjs password hashing
+- Delete an account from Settings once accepted sponsorships are finished or cancelled
 
 **Organizer Domain**
 - Create and manage events with image uploads to Cloudinary
 - Review sponsor applications per event and accept or reject each one
-- View ML-powered analysis results for their events
 - Receive post-event feedback that feeds back into reputation scores; feedback opens only after the sponsorship is accepted, the event ends, and both sides confirm it happened
 - Rate a sponsor's activation when confirming, which feeds that brand's future predictions
 - Counter-offer with sponsors until one side accepts the other's latest amount
@@ -233,19 +243,21 @@ A Node.js + Express REST API that manages all application data, user authenticat
 - Track application status from the dashboard
 - View deal analysis powered by the ML service
 - Access AI-generated negotiation points and cold email drafts
+- Search and filter every event by name, city or category, a page at a time
 - Reuse a saved analysis for 7 days, so repeat views spend no Groq quota; any change to the event or brand gets a fresh one
 - Cancel an accepted deal, with a reason, until both sides have confirmed it
 
 **Real-time Chat** (Socket.io)
 - Room-based messaging between sponsors and organizers scoped to a specific event
 - Sockets and chat routes authenticate with the access-token cookie; only a conversation's two participants can read or send
-- Inbox with unread counts, typing indicator, read receipts and image or PDF attachments (5 MB)
+- Inbox with unread counts, typing indicator, read receipts and image or PDF attachments (5 MB); PDFs open through short-lived signed links
 - The live offer shows inside the chat, and every offer and decision is recorded in the conversation
 
 **Notifications**
-- A bell for both sides, updated live over the socket, covering offers, counter-offers, decisions, messages, confirmations and feedback
+- A bell for both sides, updated live over the socket, covering offers, counter-offers, decisions, cancellations, messages, confirmations and feedback
 - Global notification delivery to the recipient's personal room
 - Email alerts for people who aren't on the site, with an off switch in Settings; a busy chat sends one email until it's read
+- Codes and alerts share one branded email template, with a plain text copy and everything users typed escaped
 - Persistent message history in MongoDB
 
 **Automated Jobs** (node-cron)
@@ -255,6 +267,12 @@ A Node.js + Express REST API that manages all application data, user authenticat
 **Admin**
 - Manage event categories, cities, sponsor brand types
 - Platform-level oversight
+
+**Security**
+- Requests and sockets from other sites are refused, because login cookies have to work across domains
+- Rate limits on login, codes, email and predictions
+- Inputs validated with zod, and MongoDB operator keys rejected
+- Chat limited to 20 messages per 10 seconds for each person
 
 ### Database Models
 
@@ -266,18 +284,24 @@ A Node.js + Express REST API that manages all application data, user authenticat
 
 **Joint work by Rishabh Patidar & Sujal Hammad**
 
-A React 19 SPA built with Vite and styled entirely with Tailwind CSS. The two dashboards (organizer and sponsor) share a common shell and component library.
+A React 19 SPA built with Vite and styled entirely with Tailwind CSS. The organizer and sponsor areas share one shell and component library.
 
 ### Key Pages & Components
 
-- **AuthGate** - protects all authenticated routes, redirects to login if needed
-- **DashboardSwitch** - renders `OrganizerDashboard` or `SponsorDashboard` based on user role
-- **SponsorWisePage** - main analysis flow: enter event + brand details, get ML predictions
-- **SponsorAnalysisPage** - full results view with tabbed panels (AI Insights, Recommendations, Executive Summary, Negotiation, Outreach)
-- **OrganizerEventPage / SponsorEventPage** - event detail views with inline ChatBox
-- **ResultsPanel / AiInsightsPanel / NegotiationPanel / OutreachPanel** - modular result components
-- **ChatBox** - real-time Socket.io chat embedded in event pages
-- **AdminPage** - category/city/brand-type management
+- **LandingPage** - the main page, where visitors choose organizer or sponsor
+- **RoleLandingPage** - a landing page for each role, with an animated `ProductDemo`
+- **RegisterPage / LoginPage / VerifyOtpPage** - sign-up takes its role from the landing page, so it isn't asked twice
+- **OrganizerDashboard / SponsorDashboard** - paged event lists with search, and what needs attention
+- **OrganizerEventPage / SponsorEventPage** - event details, offers, counter-offers, confirmation, cancelling and feedback
+- **SponsorWisePage** - the Predictor: enter event and brand details, get ML predictions
+- **SponsorAnalysisPage** - full analysis of a real event for the sponsor's brand
+- **SponsorshipsPage / HistoryPage** - active and closed deals, and past events and sponsorships
+- **MessagesPage / ChatThread** - inbox and real-time chat, with the live offer and attachments
+- **NotificationBell** - live updates for both sides
+- **WakeBanner** - explains the wait while free hosting wakes up
+- **SettingsPage** - profile, email alerts, password and account deletion
+- **LegalPage** - Privacy Policy and Terms of Use
+- **AdminPage** - category, city and brand-type management
 
 ---
 
@@ -304,10 +328,11 @@ Weather defaults, festive months, city populations, and brand budget benchmarks 
 
 ### Prerequisites
 
-- Node.js ≥ 18
-- Python ≥ 3.10
+- Node.js ≥ 20
+- Python 3.12
 - MongoDB (local or Atlas)
 - Cloudinary account
+- A Gmail app password or Brevo API key, for sign-up codes
 - Groq API key (optional - service degrades gracefully without it)
 
 ### 1. ML Service
@@ -333,8 +358,11 @@ npm run dev
 ```bash
 # From project root
 npm install
+# Copy .env.example to .env
 npm run dev
 ```
+
+Sign in at `/admin` and add cities, event categories and brand types before creating events. Use the names in `src/lib/mlMappings.js` so predictions recognise them.
 
 ---
 
@@ -381,6 +409,35 @@ VITE_BACKEND_BASE_URL=http://localhost:8080/api
 ```
 
 Never put the ML API key in a `VITE_` variable: those are published in the browser bundle.
+
+---
+
+## Deployment
+
+Everything runs on free plans, and every push to `main` redeploys automatically.
+
+| Part | Host | Address |
+|---|---|---|
+| Website | Vercel | https://sponsorwise.vercel.app |
+| Backend | Render | https://sponsorwise-api.onrender.com |
+| ML service | Render | https://sponsorwise-ml.onrender.com |
+| Database | MongoDB Atlas (M0) | Private |
+| Email | Brevo | - |
+| Images and files | Cloudinary | - |
+
+### Setting it up again
+
+1. **Atlas:** allow `0.0.0.0/0` under Network Access, because Render's free plan has no fixed IP address.
+2. **Render:** create a Blueprint from this repo. `render.yaml` defines both services and generates their secrets; enter the remaining values when asked.
+3. **Vercel:** import this repo and set `VITE_BACKEND_BASE_URL` to the backend address plus `/api`, then redeploy, because the value is built into the site.
+4. **Render again:** set `CLIENT_ORIGIN` on the backend and `ALLOWED_ORIGINS` on the ML service to the exact Vercel address, with no trailing slash.
+5. **Admin:** sign in at `/admin` and add cities, event categories and brand types.
+
+### Free plan limits
+
+- Render sleeps after about 15 minutes idle, so the first visit afterwards waits up to a minute. The site shows a message while it wakes.
+- Scheduled jobs don't run while the backend sleeps. They catch up when it wakes.
+- Brevo's free plan limits how many emails go out each day.
 
 ---
 
