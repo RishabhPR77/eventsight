@@ -227,8 +227,7 @@ function Scene({ id, pressed }) {
 
 const prefersReducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-export default function ProductDemo() {
-  const [role, setRole] = useState("organizer");
+export default function ProductDemo({ role }) {
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState("settle");
   const [playing, setPlaying] = useState(() => !prefersReducedMotion());
@@ -263,12 +262,6 @@ export default function ProductDemo() {
     return () => clearTimeout(timer);
   }, [playing, phase, index, step, steps]);
 
-  const chooseRole = (next) => {
-    setRole(next);
-    setIndex(0);
-    setPhase("settle");
-  };
-
   const chooseStep = (next) => {
     setIndex(next);
     setPhase("settle");
@@ -276,21 +269,7 @@ export default function ProductDemo() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" aria-label="Choose a demo" className="inline-flex rounded-xl border border-line bg-white p-1">
-          {[["organizer", "I'm an organizer"], ["sponsor", "I'm a sponsor"]].map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={role === id}
-              onClick={() => chooseRole(id)}
-              className={cn("h-10 rounded-lg px-4 text-sm font-semibold transition", role === id ? "bg-brand text-white" : "text-ink-soft hover:text-ink")}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+      <div className="flex justify-end">
         <button
           type="button"
           onClick={() => setPlaying((p) => !p)}

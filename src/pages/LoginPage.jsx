@@ -37,7 +37,7 @@ export default function LoginPage() {
     <AuthLayout
       title="Welcome back"
       description="Sign in to your SponsorWise account."
-      footer={<>New here? <Link to="/register" className="font-semibold text-brand hover:underline">Create an account</Link></>}
+      footer={<>New here? <Link to="/" className="font-semibold text-brand hover:underline">Create an account</Link></>}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input label="Username" name="username" autoComplete="username" autoFocus required />

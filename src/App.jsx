@@ -5,8 +5,10 @@ import AppShell from "@/components/layout/AppShell";
 import WakeBanner from "@/components/layout/WakeBanner";
 import { PageSpinner } from "@/components/ui/Primitives";
 import { useAuth } from "@/context/AuthContext";
+import { wasSignedIn } from "@/lib/session";
 
 const LandingPage = lazy(() => import("./pages/LandingPage"));
+const RoleLandingPage = lazy(() => import("./pages/RoleLandingPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
 const VerifyOtpPage = lazy(() => import("./pages/VerifyOtpPage"));
@@ -27,7 +29,7 @@ const AdminPage = lazy(() => import("./pages/AdminPage"));
 
 function Home() {
   const { user, ready } = useAuth();
-  if (!ready) return <PageSpinner label="Getting things ready…" />;
+  if (!ready && wasSignedIn()) return <PageSpinner label="Getting things ready…" />;
   if (!user) return <LandingPage />;
   return (
     <AppShell>
@@ -78,6 +80,8 @@ export default function App() {
           <Route path="/" element={<Home />} />
 
           <Route element={<PublicOnly />}>
+            <Route path="/for-organizers" element={<RoleLandingPage role="organizer" />} />
+            <Route path="/for-sponsors" element={<RoleLandingPage role="sponsor" />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />

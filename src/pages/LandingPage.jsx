@@ -1,154 +1,123 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, BadgeCheck, CalendarPlus, FileSignature, Gauge, MailCheck, MessagesSquare, Search, TrendingUp, Users } from "lucide-react";
-import Button from "@/components/ui/Button";
-import Logo from "@/components/ui/Logo";
-import { Badge } from "@/components/ui/Primitives";
-import VerdictRing from "@/components/results/VerdictRing";
-import ProductDemo from "@/components/demo/ProductDemo";
+import { ArrowRight, Bell, CalendarDays, Check, Gauge, Handshake, MessagesSquare, Store } from "lucide-react";
+import MarketingLayout from "@/components/layout/MarketingLayout";
+import { cn } from "@/lib/utils";
 
-const AUDIENCES = [
+const ROLES = [
   {
-    title: "For event organizers",
-    points: [
-      { icon: CalendarPlus, text: "List your event once, in front of brands looking for one" },
-      { icon: FileSignature, text: "Review offers and accept the right sponsor" },
-      { icon: BadgeCheck, text: "Build a reputation sponsors can trust" },
-    ],
+    to: "/for-organizers",
+    icon: CalendarDays,
+    eyebrow: "I'm an organizer",
+    title: "I need sponsors for my event",
+    points: ["List your event for brands to find", "Compare and negotiate offers", "Build a reputation that sponsors trust"],
+    cta: "Continue as organizer",
+    dark: true,
   },
   {
-    title: "For brands and sponsors",
-    points: [
-      { icon: Search, text: "Find events by city, category and audience" },
-      { icon: Gauge, text: "See likely turnout and cost per person before you commit" },
-      { icon: MailCheck, text: "Get negotiation points and a ready outreach email" },
-    ],
+    to: "/for-sponsors",
+    icon: Store,
+    eyebrow: "I'm a sponsor",
+    title: "I want events worth sponsoring",
+    points: ["Discover events by city and category", "Check expected turnout and brand fit", "Negotiate and track every deal"],
+    cta: "Continue as sponsor",
+    dark: false,
   },
+];
+
+const FEATURES = [
+  { icon: Gauge, title: "AI analysis", text: "Estimated turnout, brand fit and the chance of a deal, before anyone commits." },
+  { icon: Handshake, title: "Real negotiation", text: "Counter-offer back and forth until both sides agree on a number." },
+  { icon: MessagesSquare, title: "Chat in one place", text: "Talk directly and share images and PDFs, right next to the offer." },
+  { icon: Bell, title: "Nothing gets missed", text: "A live bell for every offer, decision, message and confirmation." },
 ];
 
 const STEPS = [
-  { title: "List or discover", text: "Organizers publish events. Sponsors browse what's coming up." },
-  { title: "Check the fit", text: "AI estimates turnout, brand fit and the chance of a deal." },
-  { title: "Agree the deal", text: "Chat, share files and counter-offer until you both accept." },
-  { title: "Confirm and review", text: "After the event, both sides confirm and feedback opens." },
+  { title: "Connect", text: "Organizers publish events, and sponsors find the ones that fit." },
+  { title: "Agree", text: "Check the numbers, chat, and negotiate until you both accept." },
+  { title: "Deliver", text: "The event happens, and both sides confirm the sponsorship." },
+  { title: "Build trust", text: "Verified feedback makes the next deal easier for everyone." },
 ];
 
-function PreviewCard() {
+function RoleCard({ role }) {
+  const { icon: Icon, dark } = role;
   return (
-    <div className="rounded-2xl border border-line bg-white p-5 shadow-lift sm:p-6">
-      <div className="flex items-center justify-between gap-3">
-        <span className="eyebrow">Example analysis</span>
-        <Badge tone="good">Strong fit</Badge>
-      </div>
-      <div className="mt-5 flex items-center gap-5">
-        <VerdictRing percent={72} band="HIGH" size={112} />
-        <div className="min-w-0">
-          <h3 className="text-lg font-semibold">Food Festival, Indore</h3>
-          <p className="mt-1 text-sm text-ink-soft">Sponsored by a beverage brand</p>
-        </div>
-      </div>
-      <dl className="mt-5 grid grid-cols-3 gap-3 border-t border-line pt-5">
-        {[
-          [Users, "Turnout", "6,400"],
-          [TrendingUp, "Brand fit", "85%"],
-          [MessagesSquare, "Per person", "₹7"],
-        ].map(([Icon, label, value]) => (
-          <div key={label}>
-            <dt className="flex items-center gap-1 text-xs text-ink-faint"><Icon className="h-3.5 w-3.5" aria-hidden="true" />{label}</dt>
-            <dd className="mt-1 font-display text-xl font-bold">{value}</dd>
-          </div>
+    <Link
+      to={role.to}
+      className={cn(
+        "group flex flex-col rounded-3xl border p-6 shadow-card transition duration-200 hover:-translate-y-1 hover:shadow-lift sm:p-8",
+        dark ? "border-brand-strong bg-brand-strong text-white" : "border-line bg-white"
+      )}
+    >
+      <span className={cn("flex h-12 w-12 items-center justify-center rounded-2xl", dark ? "bg-white/10 text-marigold" : "bg-brand-soft text-brand")}>
+        <Icon className="h-6 w-6" aria-hidden="true" />
+      </span>
+      <p className={cn("mt-5 text-sm font-semibold", dark ? "text-marigold" : "text-brand")}>{role.eyebrow}</p>
+      <h2 className={cn("mt-1 text-2xl font-bold sm:text-3xl", dark && "text-white")}>{role.title}</h2>
+      <ul className="mt-5 flex-1 space-y-2.5">
+        {role.points.map((point) => (
+          <li key={point} className={cn("flex items-start gap-2.5", dark ? "text-white/80" : "text-ink-soft")}>
+            <Check className={cn("mt-1 h-4 w-4 shrink-0", dark ? "text-marigold" : "text-good")} aria-hidden="true" />
+            {point}
+          </li>
         ))}
-      </dl>
-    </div>
+      </ul>
+      <span className={cn("mt-7 inline-flex items-center gap-2 font-semibold", dark ? "text-white" : "text-brand")}>
+        {role.cta}
+        <ArrowRight className="h-5 w-5 transition group-hover:translate-x-1" aria-hidden="true" />
+      </span>
+    </Link>
   );
 }
 
 export default function LandingPage() {
   return (
-    <div className="min-h-dvh">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
-        <Logo />
-        <div className="flex items-center gap-1 sm:gap-2">
-          <Button variant="ghost" to="/login">Sign in</Button>
-          <Button to="/register">Get started</Button>
+    <MarketingLayout>
+      <section className="mx-auto max-w-6xl animate-rise px-5 pb-14 pt-12 sm:pt-20">
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="eyebrow text-marigold-strong">Event sponsorship for Madhya Pradesh</p>
+          <h1 className="mt-4 text-[2.75rem] font-bold leading-[1.05] sm:text-6xl">
+            Where great events meet the <span className="text-brand">right sponsors.</span>
+          </h1>
+          <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-ink-soft">
+            SponsorWise helps organizers and brands find each other, see how a deal could perform, and agree on terms in one place.
+          </p>
         </div>
-      </header>
 
-      <main>
-        <section className="mx-auto grid max-w-6xl items-center gap-10 px-5 pb-16 pt-8 lg:grid-cols-[1.15fr_1fr] lg:gap-16 lg:pt-16">
-          <div className="animate-rise">
-            <p className="eyebrow text-marigold-strong">Event sponsorship for Madhya Pradesh</p>
-            <h1 className="mt-4 text-[2.75rem] font-bold leading-[1.05] sm:text-6xl">
-              Know a sponsorship will work <span className="text-brand">before you pitch it.</span>
-            </h1>
-            <p className="mt-5 max-w-xl text-lg leading-relaxed text-ink-soft">
-              SponsorWise connects event organizers with the right brands, predicts how a deal will perform, and keeps every step in one place.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Button size="lg" to="/register">Create a free account <ArrowRight className="h-4 w-4" aria-hidden="true" /></Button>
-              <Button size="lg" variant="secondary" href="#demo">Watch the demo</Button>
-            </div>
-          </div>
-          <PreviewCard />
-        </section>
+        <h2 id="choose" className="mb-5 mt-12 scroll-mt-24 text-center text-lg font-semibold text-ink-soft sm:mt-14">Which one are you?</h2>
+        <div className="grid gap-5 md:grid-cols-2">
+          {ROLES.map((role) => <RoleCard key={role.to} role={role} />)}
+        </div>
+      </section>
 
-        <section id="demo" className="mx-auto max-w-4xl px-5 pb-16">
-          <div className="mb-6 text-center">
-            <h2 className="text-3xl font-bold sm:text-4xl">See how it works for you</h2>
-            <p className="mt-2 text-ink-soft">Pick your side and watch a sponsorship go from start to finish.</p>
-          </div>
-          <ProductDemo />
-        </section>
-
-        <section className="border-y border-line bg-white">
-          <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 md:grid-cols-2">
-            {AUDIENCES.map((audience) => (
-              <div key={audience.title}>
-                <h2 className="text-2xl font-bold">{audience.title}</h2>
-                <ul className="mt-5 space-y-4">
-                  {audience.points.map(({ icon: Icon, text }) => (
-                    <li key={text} className="flex gap-3 text-ink-soft">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
-                        <Icon className="h-5 w-5" aria-hidden="true" />
-                      </span>
-                      <span className="pt-1.5">{text}</span>
-                    </li>
-                  ))}
-                </ul>
+      <section className="border-y border-line bg-white">
+        <div className="mx-auto max-w-6xl px-5 py-14 sm:py-16">
+          <h2 className="max-w-xl text-3xl font-bold sm:text-4xl">One place for the whole deal</h2>
+          <div className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+            {FEATURES.map(({ icon: Icon, title, text }) => (
+              <div key={title}>
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-marigold-soft text-marigold-strong">
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <h3 className="mt-3 text-lg font-semibold">{title}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-ink-soft">{text}</p>
               </div>
             ))}
           </div>
-        </section>
-
-        <section className="mx-auto max-w-6xl px-5 py-14">
-          <h2 className="text-3xl font-bold">How it works</h2>
-          <ol className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {STEPS.map((step, index) => (
-              <li key={step.title}>
-                <span className="font-display text-3xl font-bold text-marigold">{index + 1}</span>
-                <h3 className="mt-2 text-lg font-semibold">{step.title}</h3>
-                <p className="mt-1 text-sm leading-relaxed text-ink-soft">{step.text}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <section className="mx-auto max-w-6xl px-5 pb-16">
-          <div className="flex flex-wrap items-center justify-between gap-5 rounded-2xl bg-brand-strong p-8 sm:p-10">
-            <div>
-              <h2 className="text-2xl font-bold text-white sm:text-3xl">Ready to find your next sponsor?</h2>
-              <p className="mt-2 text-white/75">It takes a minute to set up.</p>
-            </div>
-            <Button variant="accent" size="lg" to="/register">Get started <ArrowRight className="h-4 w-4" aria-hidden="true" /></Button>
-          </div>
-        </section>
-      </main>
-
-      <footer className="border-t border-line">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-6 text-sm text-ink-faint">
-          <span>© {new Date().getFullYear()} SponsorWise</span>
-          <Link to="/login" className="hover:text-ink">Sign in</Link>
         </div>
-      </footer>
-    </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-5 py-14 sm:py-16">
+        <h2 className="text-3xl font-bold sm:text-4xl">How a sponsorship comes together</h2>
+        <ol className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {STEPS.map((step, index) => (
+            <li key={step.title} className="border-t-2 border-marigold pt-4">
+              <span className="text-sm font-semibold text-ink-faint">Step {index + 1}</span>
+              <h3 className="mt-1 text-lg font-semibold">{step.title}</h3>
+              <p className="mt-1 text-sm leading-relaxed text-ink-soft">{step.text}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+    </MarketingLayout>
   );
 }
