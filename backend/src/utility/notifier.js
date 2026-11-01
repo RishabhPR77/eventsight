@@ -1,5 +1,6 @@
 const { Notification } = require("../models/notification.model");
 const { User } = require("../models/user.model");
+const { alertEmail } = require("./emailTemplates");
 const { sendEmail } = require("./sendEmail");
 
 let io = null;
@@ -22,11 +23,7 @@ const emailAlert = async ({ user, title, body, link }) => {
     const recipient = await User.findById(user).select("email emailAlerts isVerified").lean();
     if (!recipient?.isVerified || recipient.emailAlerts === false) return;
 
-    await sendEmail(
-        recipient.email,
-        title,
-        `${title}\n\n${body ? `${body}\n\n` : ""}Open SponsorWise: ${process.env.CLIENT_ORIGIN}${link || ""}\n\nYou can turn these emails off in Settings.`
-    );
+    await sendEmail(recipient.email, alertEmail({ title, body, link }));
 };
 
 // A failed notification must never fail the action that caused it

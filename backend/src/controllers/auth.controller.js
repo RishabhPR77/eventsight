@@ -5,6 +5,7 @@ const {ApiError}=require("../utility/ApiError.js")
 const {ApiResponse}=require("../utility/ApiResponse.js")
 const {asyncHandler}=require("../utility/AsyncHandler.js");
 const { Otp } = require("../models/otp.model.js");
+const { otpEmail } = require("../utility/emailTemplates.js");
 const { sendEmail } = require("../utility/sendEmail.js");
 const { cookieOptions } = require("../utility/cookieOptions.js");
 const { hasOpenDeals, removeUserData } = require("../utility/dealRules.js");
@@ -83,11 +84,7 @@ const registerSponsor=asyncHandler(async(req,res)=>{
     })
 
    try {
-     await sendEmail(
-         user.email,
-         "Your Otp Code",
-         `Your otp is ${otp}. It will expires in 5 minute`
-     )
+     await sendEmail(user.email,otpEmail(otp,"verify"))
    } catch (error) {
         await User.findByIdAndDelete(user._id);
         await Otp.deleteOne({ user: user._id });
@@ -127,11 +124,7 @@ const registerOrganizer=asyncHandler(async(req,res)=>{
     })
 
    try {
-     await sendEmail(
-         user.email,
-         "Your Otp Code",
-         `Your otp is ${otp}. It will expires in 5 minute`
-     )
+     await sendEmail(user.email,otpEmail(otp,"verify"))
    } catch (error) {
         await User.findByIdAndDelete(user._id);
         await Otp.deleteOne({ user: user._id });
@@ -344,11 +337,7 @@ const resendVerificationOtp=asyncHandler(async(req,res)=>{
 
     })
 
-    await sendEmail(
-        user.email,
-        'Resend OTP',
-        `your otp code is ${otp}`
-    );
+    await sendEmail(user.email,otpEmail(otp,"verify"));
 
     return res.status(200).json(
         new ApiResponse(200,{},"Otp sent Successfully")
@@ -384,11 +373,7 @@ const forgetPassword=asyncHandler(async(req,res)=>{
     })
 
     try {
-        await sendEmail(
-            user.email,
-            "Your Otp Code",
-            `your otp code is ${otp}. it will expire in 5min`
-        )
+        await sendEmail(user.email,otpEmail(otp,"reset"))
     } catch (error) {
         await Otp.deleteOne({user:user._id});
         throw new ApiError(500,"Failed to send OTP email")
@@ -502,11 +487,7 @@ const updateProfile=asyncHandler(async(req,res)=>{
         })
 
         try {
-            await sendEmail(
-                newEmail,
-                "Your Otp Code",
-                `Your otp is ${otp}. It will expires in 5 minute`
-            )
+            await sendEmail(newEmail,otpEmail(otp,"newEmail"))
         } catch (error) {
             await Otp.deleteMany({user:user._id});
             throw new ApiError(500,"Failed to send OTP email");

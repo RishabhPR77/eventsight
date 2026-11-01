@@ -5,13 +5,14 @@ const EMAIL_TIMEOUT_MS=15000
 
 // Render's free plan blocks SMTP ports, so production sends over Brevo's HTTPS API.
 // Local development can keep using Gmail SMTP.
-const sendWithBrevo=(to,subject,text)=>axios.post(
+const sendWithBrevo=(to,{subject,text,html})=>axios.post(
     "https://api.brevo.com/v3/smtp/email",
     {
         sender:{name:"SponsorWise",email:process.env.EMAIL_FROM},
         to:[{email:to}],
         subject,
-        textContent:text
+        textContent:text,
+        htmlContent:html
     },
     {
         timeout:EMAIL_TIMEOUT_MS,
@@ -22,7 +23,7 @@ const sendWithBrevo=(to,subject,text)=>axios.post(
     }
 )
 
-const sendWithSmtp=async(to,subject,text)=>{
+const sendWithSmtp=async(to,{subject,text,html})=>{
     const transporter=nodemailer.createTransport({
         service:"gmail",
         auth:{
@@ -35,16 +36,18 @@ const sendWithSmtp=async(to,subject,text)=>{
         from:process.env.EMAIL_USER,
         to,
         subject,
-        text
+        text,
+        html
     });
 }
 
-const sendEmail=async(to,subject,text)=>{
+// message comes from emailTemplates.js: {subject,text,html}
+const sendEmail=async(to,message)=>{
     if(process.env.BREVO_API_KEY){
-        await sendWithBrevo(to,subject,text)
+        await sendWithBrevo(to,message)
         return
     }
-    await sendWithSmtp(to,subject,text)
+    await sendWithSmtp(to,message)
 };
 
 module.exports={sendEmail}
