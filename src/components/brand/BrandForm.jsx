@@ -36,8 +36,8 @@ function BrandFormBody({ profile, onClose, onSaved }) {
           <div className="space-y-4">
             <Input label="Brand name" name="brandName" defaultValue={profile?.brandName} placeholder="Nimbu Beverages" required />
             {brandTypes ? (
-              <Select label="Industry" name="brandType" defaultValue={profile?.brandType?._id || ""} required>
-                <option value="" disabled>Choose an industry</option>
+              <Select label="Industry" name="brandType" defaultValue={profile?.brandType?._id || ""} hint={brandTypes.length ? undefined : "No industries yet. Please try again in a minute."} required>
+                <option value="" disabled>{brandTypes.length ? "Choose an industry" : "No industries yet"}</option>
                 {brandTypes.map((item) => <option key={item._id} value={item._id}>{titleCase(item.name)}</option>)}
               </Select>
             ) : <div className="h-[74px] animate-pulse rounded-xl bg-sand" />}

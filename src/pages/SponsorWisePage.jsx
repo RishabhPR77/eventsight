@@ -4,10 +4,9 @@ import ResultsPanel from "@/components/results/ResultsPanel";
 import Button from "@/components/ui/Button";
 import { Input, RatingSlider, Select, Textarea, Toggle } from "@/components/ui/Field";
 import { Badge, Card, EmptyState, PageHeader } from "@/components/ui/Primitives";
-import { analyzeBrand, fetchBrandTypes, fetchEventCategories, predictDeal } from "@/lib/api";
+import { analyzeBrand, predictDeal } from "@/lib/api";
 import { CITY_FOCUS_LABELS, KPI_LABELS } from "@/lib/labels";
 import { ML_BRAND_CATEGORIES, ML_CITIES, ML_EVENT_TYPES } from "@/lib/mlMappings";
-import { useResource } from "@/hooks/useResource";
 import { clampNum, cn, getErrorMessage, titleCase } from "@/lib/utils";
 
 const inDays = (days) => new Date(Date.now() + days * 864e5).toISOString().slice(0, 10);
@@ -161,9 +160,9 @@ export default function SponsorWisePage() {
   const [error, setError] = useState("");
   const resultsRef = useRef(null);
 
-  const { data } = useResource(() => Promise.all([fetchBrandTypes(), fetchEventCategories()]));
-  const brandCategories = data?.[0]?.length ? data[0].map((item) => item.name) : ML_BRAND_CATEGORIES;
-  const eventTypes = data?.[1]?.length ? data[1].map((item) => item.name) : ML_EVENT_TYPES;
+  // The model only knows these names, and the saved lists come back in other cases
+  const brandCategories = ML_BRAND_CATEGORIES;
+  const eventTypes = ML_EVENT_TYPES;
 
   useEffect(() => {
     if (result) resultsRef.current?.scrollIntoView({ block: "start" });

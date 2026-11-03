@@ -26,6 +26,7 @@ const { Server } = require("socket.io")
 const chatSocket = require("./socket/chatSocket.js")
 const { startEventExpiryJob } = require("./jobs/eventExpiry.job.js")
 const { startDealResolutionJob } = require("./jobs/dealResolution.job.js")
+const { ensureDefaultLists } = require("./config/defaultLists.js")
 
 const SHUTDOWN_TIMEOUT_MS = 10000
 
@@ -95,7 +96,9 @@ process.on("unhandledRejection", (reason) => {
 })
 
 
-connectDb().then(() => {
+connectDb().then(async () => {
+    // A failure here only means empty dropdowns, so the server still starts
+    await ensureDefaultLists().catch((err) => console.error("Could not add default lists:", err.message))
     startEventExpiryJob()
     startDealResolutionJob()
     server.listen(process.env.PORT || 8000, () => {

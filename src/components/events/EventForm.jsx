@@ -95,11 +95,11 @@ function EventFormBody({ event, onClose, onSaved }) {
         {selectsReady ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <Select label="Category" name="eventCategory" defaultValue={event?.eventCategory?._id || ""} required>
-              <option value="" disabled>Choose a category</option>
+              <option value="" disabled>{categories.length ? "Choose a category" : "No categories yet"}</option>
               {categories.map((item) => <option key={item._id} value={item._id}>{titleCase(item.name)}</option>)}
             </Select>
             <Select label="City" name="location" defaultValue={event?.location || ""} required>
-              <option value="" disabled>Choose a city</option>
+              <option value="" disabled>{cities.length ? "Choose a city" : "No cities yet"}</option>
               {cities.map((item) => <option key={item._id} value={item.name}>{item.name}</option>)}
             </Select>
           </div>
