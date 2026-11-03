@@ -10,7 +10,8 @@ const SCRIPTS = {
   organizer: [
     { scene: "orgDashboard", caption: "Start from your dashboard and create an event." },
     { scene: "orgForm", caption: "Add the details once. Sponsors can find it right away." },
-    { scene: "orgOffer", caption: "A brand sends an offer and the bell lets you know. Counter it or accept." },
+    { scene: "orgOffer", caption: "Offers land on your Offers page, and the bell tells you. Counter, or accept the one you want." },
+    { scene: "orgAgreed", caption: "Deal agreed. The event closes to other sponsors, and you can post it again if you want more." },
     { scene: "orgConfirm", caption: "After the event, confirm the sponsorship happened." },
     { scene: "orgDone", caption: "Once both sides confirm, the sponsor can leave feedback, and your reputation grows.", last: true },
   ],
@@ -18,8 +19,9 @@ const SCRIPTS = {
     { scene: "spoDiscover", caption: "Browse upcoming events by city and category." },
     { scene: "spoEvent", caption: "Open an event and run the AI analysis." },
     { scene: "spoAnalysis", caption: "See likely turnout, brand fit and the chance of a deal, then apply." },
-    { scene: "spoApply", caption: "Send your offer. You can negotiate in chat until you both agree." },
-    { scene: "spoDone", caption: "Track it to the end, and leave feedback once both sides confirm.", last: true },
+    { scene: "spoApply", caption: "Send your offer, with a note for the organizer." },
+    { scene: "spoNegotiate", caption: "If the organizer counters, every number is laid out, so you can accept or reply in one tap." },
+    { scene: "spoAgreed", caption: "Deal agreed. After the event you both confirm, then you can leave feedback.", last: true },
   ],
 };
 
@@ -66,6 +68,21 @@ function EventTile({ name, city, date, ask, target, shade }) {
   );
 }
 
+function AgreedScene({ title, amount, note }) {
+  return (
+    <div className="flex h-full min-h-48 flex-col items-center justify-center rounded-xl bg-good px-4 py-6 text-center text-white">
+      <svg viewBox="0 0 120 120" className="celebrate-anim celebrate-pop h-14 w-14 sm:h-16 sm:w-16" aria-hidden="true">
+        <circle cx="60" cy="60" r="54" fill="#FFFFFF" />
+        <path d="M36 62 L53 78 L85 44" fill="none" stroke="#1C7C54" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" className="celebrate-anim celebrate-draw" />
+      </svg>
+      <div className="mt-3 font-display text-lg font-bold sm:text-xl">{title}</div>
+      {amount ? <div className="font-display text-2xl font-bold text-marigold sm:text-3xl">{amount}</div> : null}
+      <div className="mt-1 max-w-xs text-xs text-white/85 sm:text-sm">{note}</div>
+      <span data-demo-target="" className="mt-3 inline-flex rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-good">Continue</span>
+    </div>
+  );
+}
+
 function Scene({ id, pressed }) {
   switch (id) {
     case "orgDashboard":
@@ -104,14 +121,18 @@ function Scene({ id, pressed }) {
     case "orgOffer":
       return (
         <div>
-          <div className="font-display text-base font-bold sm:text-lg">Indore Food Festival</div>
-          <div className="mt-1 text-xs text-ink-faint">Sponsorship offers</div>
+          <div className="font-display text-base font-bold sm:text-lg">Offers</div>
+          <div className="mt-2 flex gap-1.5">
+            {["Needs you · 2", "In progress", "Closed"].map((chip, i) => (
+              <span key={chip} className={cn("rounded-lg px-2.5 py-1 text-xs font-semibold", i === 0 ? "bg-brand text-white" : "bg-sand text-ink-soft")}>{chip}</span>
+            ))}
+          </div>
           <Panel className="mt-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-marigold-soft font-display text-sm font-bold text-warn">NB</span>
               <div>
                 <div className="text-sm font-semibold">Nimbu Beverages</div>
-                <div className="text-xs text-ink-faint">Offered ₹45,000</div>
+                <div className="text-xs text-ink-faint">Indore Food Festival · offered ₹45,000</div>
               </div>
             </div>
             <span className="flex gap-1.5">
@@ -121,10 +142,12 @@ function Scene({ id, pressed }) {
           </Panel>
           <Panel className="mt-2 flex items-center gap-2.5 opacity-60">
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-soft font-display text-sm font-bold text-brand">TW</span>
-            <div><div className="text-sm font-semibold">TechWave</div><div className="text-xs text-ink-faint">Offered ₹30,000</div></div>
+            <div><div className="text-sm font-semibold">TechWave</div><div className="text-xs text-ink-faint">Indore Food Festival · offered ₹30,000</div></div>
           </Panel>
         </div>
       );
+    case "orgAgreed":
+      return <AgreedScene title="Deal agreed!" amount="₹45,000" note="Nimbu Beverages is sponsoring Indore Food Festival. Other sponsors no longer see it." />;
     case "orgConfirm":
       return (
         <Panel>
@@ -139,14 +162,7 @@ function Scene({ id, pressed }) {
         </Panel>
       );
     case "orgDone":
-      return (
-        <Panel className="flex h-full flex-col items-center justify-center py-6 text-center">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-good-soft text-good"><Check className="h-6 w-6" /></span>
-          <div className="mt-2 font-display text-lg font-bold">Confirmed by both sides</div>
-          <div className="mt-1 text-sm text-ink-soft">Feedback is open for Nimbu Beverages</div>
-          <span data-demo-target="" className="mt-3"><Badge tone="brand">Reputation updated</Badge></span>
-        </Panel>
-      );
+      return <AgreedScene title="Sponsorship complete" note="Both sides confirmed. Feedback is open, and your reputation grows." />;
     case "spoDiscover":
       return (
         <div>
@@ -199,27 +215,35 @@ function Scene({ id, pressed }) {
         <Panel>
           <div className="font-display text-base font-bold sm:text-lg">Apply for sponsorship</div>
           <div className="mt-3 space-y-2">
-            <Line label="Your offer" value="₹45,000" />
+            <Line label="Your offer" value="₹40,000" />
             <Line label="Message to organizer" value="We'd love a sampling stall near the main stage." />
           </div>
           <div className="mt-3 flex justify-end"><MockButton target pressed={pressed}><Send className="h-3.5 w-3.5" />Send offer</MockButton></div>
         </Panel>
       );
-    case "spoDone":
+    case "spoNegotiate":
       return (
-        <Panel className="h-full">
-          <div className="font-display text-base font-bold sm:text-lg">Your sponsorship</div>
-          <ol className="mt-4 space-y-2.5">
-            {["Offer sent", "Accepted by organizer", "Event finished", "Confirmed by both sides"].map((label) => (
-              <li key={label} className="flex items-center gap-2 text-sm">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-good text-white"><Check className="h-3 w-3" /></span>
-                {label}
-              </li>
-            ))}
-          </ol>
-          <div data-demo-target="" className="mt-3 inline-block"><Badge tone="brand">Feedback is open</Badge></div>
-        </Panel>
+        <div className="overflow-hidden rounded-xl border border-line bg-white">
+          <div className="bg-marigold-soft px-3 py-2 text-xs font-semibold sm:text-sm">Your move: the organizer countered with ₹45,000</div>
+          <div className="p-3 sm:p-4">
+            <div className="flex items-center gap-2">
+              <div className="font-display text-base font-bold sm:text-lg">Your sponsorship</div>
+              <Badge tone="brand" className="!px-2 !py-0.5 !text-[10px]">Negotiating</Badge>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <Line label="Organizer's ask" value="₹45,000" />
+              <Line label="Your offer" value="₹40,000" />
+              <Line label="Their counter" value="₹45,000" />
+            </div>
+            <div className="mt-3 flex flex-wrap justify-end gap-1.5">
+              <span className="inline-flex h-8 items-center rounded-lg border border-line px-3 text-xs font-semibold sm:h-9 sm:text-sm">Counter</span>
+              <MockButton target pressed={pressed}>Accept ₹45,000</MockButton>
+            </div>
+          </div>
+        </div>
       );
+    case "spoAgreed":
+      return <AgreedScene title="Deal agreed!" amount="₹45,000" note="You're sponsoring Indore Food Festival." />;
     default:
       return null;
   }

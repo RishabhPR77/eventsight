@@ -4,12 +4,12 @@ import { ArrowRight, CalendarCheck, CalendarDays, CalendarPlus, Handshake, Inbox
 import Button from "@/components/ui/Button";
 import EventCard, { EventGridSkeleton } from "@/components/events/EventCard";
 import EventForm from "@/components/events/EventForm";
-import { Avatar, Card, EmptyState, ErrorState, LoadMore, PageHeader, Stat, Tabs } from "@/components/ui/Primitives";
+import { Card, EmptyState, ErrorState, LoadMore, PageHeader, Stat, Tabs } from "@/components/ui/Primitives";
 import { useAuth } from "@/context/AuthContext";
 import { useDebouncedValue, usePagedList } from "@/hooks/usePagedList";
 import { useResource } from "@/hooks/useResource";
 import { getOrganizerApplications, getOrganizerEvents } from "@/lib/api";
-import { rupees } from "@/lib/utils";
+import { isOpenOffer, needsOrganizer } from "@/lib/offers";
 
 const FILTERS = [
   { id: "", label: "All" },
@@ -17,31 +17,16 @@ const FILTERS = [
   { id: "completed", label: "Completed" },
 ];
 
-function AttentionList({ items }) {
-  if (!items.length) return null;
+// Offers live on their own page; the dashboard only says when one needs a reply
+function OffersNotice({ count }) {
+  if (!count) return null;
   return (
-    <section className="mb-8" aria-labelledby="attention-title">
-      <h2 id="attention-title" className="mb-3 text-xl font-bold">Needs your attention</h2>
-      <Card className="divide-y divide-line">
-        {items.map((item) => {
-          const offer = item.negotiations?.at(-1);
-          const confirm = item.status === "accepted";
-          return (
-            <Link key={item._id} to={`/organizer/event/${item.event._id}`} className="flex items-center gap-3 p-4 transition first:rounded-t-2xl last:rounded-b-2xl hover:bg-paper">
-              <Avatar name={item.brand?.brandName || item.sponsor?.username} src={item.brand?.logo} />
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold">
-                  {confirm ? "Confirm sponsorship with " : item.status === "negotiating" ? "Counter-offer from " : "New offer from "}
-                  {item.brand?.brandName || item.sponsor?.username || "a sponsor"}
-                </p>
-                <p className="truncate text-sm text-ink-soft">{item.event.eventName} · {rupees(confirm ? item.finalAmount : offer?.amount)}</p>
-              </div>
-              <ArrowRight className="h-5 w-5 shrink-0 text-ink-faint" aria-hidden="true" />
-            </Link>
-          );
-        })}
-      </Card>
-    </section>
+    <Link to="/offers" className="mb-8 flex items-center justify-between gap-3 rounded-2xl bg-marigold-soft p-4 transition hover:bg-[#FBE8BF]">
+      <span className="font-semibold">
+        {count === 1 ? "1 offer needs" : `${count} offers need`} your attention
+      </span>
+      <ArrowRight className="h-5 w-5 shrink-0" aria-hidden="true" />
+    </Link>
   );
 }
 
@@ -64,11 +49,7 @@ export default function OrganizerDashboard() {
   const completed = events.summary?.completed || 0;
   const deals = useMemo(() => applications.data || [], [applications.data]);
 
-  const attention = useMemo(() => deals.filter((item) => {
-    if (!item.event) return false;
-    if (item.status === "accepted") return item.event.status === "completed" && !item.organizerConfirmedAt;
-    return item.event.status === "upcoming" && item.negotiations?.at(-1)?.from === "sponsor";
-  }), [deals]);
+  const attention = useMemo(() => deals.filter(needsOrganizer).length, [deals]);
 
   const accepted = deals.filter((item) => item.status === "accepted").length;
 
@@ -83,11 +64,11 @@ export default function OrganizerDashboard() {
       <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Upcoming events" value={upcoming} icon={CalendarDays} />
         <Stat label="Completed events" value={completed} icon={CalendarCheck} />
-        <Stat label="Open offers" value={deals.filter((item) => item.status !== "accepted").length} icon={Inbox} />
+        <Stat label="Open offers" value={deals.filter(isOpenOffer).length} icon={Inbox} />
         <Stat label="Accepted sponsors" value={accepted} icon={Handshake} />
       </div>
 
-      <AttentionList items={attention} />
+      <OffersNotice count={attention} />
 
       <section aria-labelledby="events-title">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

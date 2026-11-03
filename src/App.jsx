@@ -17,6 +17,7 @@ const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const OrganizerDashboard = lazy(() => import("./pages/OrganizerDashboard"));
 const OrganizerEventPage = lazy(() => import("./pages/OrganizerEventPage"));
 const HistoryPage = lazy(() => import("./pages/HistoryPage"));
+const OrganizerOffersPage = lazy(() => import("./pages/OrganizerOffersPage"));
 const SponsorDashboard = lazy(() => import("./pages/SponsorDashboard"));
 const SponsorshipsPage = lazy(() => import("./pages/SponsorshipsPage"));
 const BrandProfilePage = lazy(() => import("./pages/BrandProfilePage"));
@@ -100,6 +101,7 @@ export default function App() {
           <Route element={<RequireAuth role="organizer" />}>
             <Route path="/organizer/event/:id" element={<OrganizerEventPage />} />
             <Route path="/history" element={<HistoryPage />} />
+            <Route path="/offers" element={<OrganizerOffersPage />} />
           </Route>
           <Route element={<RequireAuth role="sponsor" />}>
             <Route path="/sponsorships" element={<SponsorshipsPage />} />

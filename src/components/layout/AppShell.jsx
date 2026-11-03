@@ -1,5 +1,5 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Compass, Handshake, History, LayoutDashboard, LogOut, MessagesSquare, Settings, Sparkles, Store } from "lucide-react";
+import { Compass, Handshake, History, Inbox, LayoutDashboard, LogOut, MessagesSquare, Settings, Sparkles, Store } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useRealtime } from "@/context/RealtimeContext";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ const SETTINGS = { to: "/settings", label: "Settings", icon: Settings, desktopOn
 const NAV = {
   organizer: [
     { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
+    { to: "/offers", label: "Offers", icon: Inbox },
     MESSAGES,
     { to: "/history", label: "History", icon: History },
     SETTINGS,

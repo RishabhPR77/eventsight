@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import toast from "react-hot-toast";
+import { useCelebrate } from "@/components/ui/Celebration";
 import { useAuth } from "@/context/AuthContext";
 import { getNotifications, markAllNotificationsRead, markNotificationRead, refreshToken, SOCKET_URL } from "@/lib/api";
 
@@ -12,6 +13,8 @@ const upsert = (list, item) => [item, ...list.filter((entry) => entry._id !== it
 export function RealtimeProvider({ children }) {
   const { user } = useAuth();
   const userId = user?._id;
+  // The socket handler is set up once, so it reads the latest celebrate through a ref
+  const celebrateRef = useRef(useCelebrate());
   const [socket, setSocket] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const openConversation = useRef(null);
@@ -38,7 +41,11 @@ export function RealtimeProvider({ children }) {
       const viewing = notification.conversation && notification.conversation === openConversation.current;
       if (viewing) return;
       setNotifications((prev) => upsert(prev, notification));
-      toast(notification.title);
+      if (notification.type === "accepted") {
+        celebrateRef.current({ big: true, title: "Deal agreed!", message: `${notification.title} · ${notification.body}` });
+      } else {
+        toast(notification.title);
+      }
     });
 
     // Access tokens are short-lived, and sockets don't pass through the API's refresh

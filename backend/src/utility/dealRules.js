@@ -9,6 +9,12 @@ const OPEN_STATUSES = ["pending", "negotiating"];
 
 const isEventFinished = (event) => event.date < eventCutoff();
 
+// One event has one sponsor. Once a deal is agreed, other sponsors stop seeing it;
+// organizers who want more sponsors post the event again.
+const takenBy = (exceptSponsor) => ({ status: "accepted", isDeleted: false, sponsor: { $ne: exceptSponsor } });
+const sponsoredEventIds = (exceptSponsor) => SponsorApplication.distinct("event", takenBy(exceptSponsor));
+const hasOtherSponsor = (eventId, exceptSponsor) => SponsorApplication.exists({ event: eventId, ...takenBy(exceptSponsor) });
+
 // A sponsorship is final once it was accepted and both sides confirmed it after the event
 const findConfirmedDeal = (sponsorId, eventId) => SponsorApplication.findOne({
     sponsor: sponsorId,
@@ -67,6 +73,8 @@ const removeUserData = async (user) => {
 module.exports = {
     OPEN_STATUSES,
     isEventFinished,
+    sponsoredEventIds,
+    hasOtherSponsor,
     findConfirmedDeal,
     hasOpenDeals,
     rejectPendingApplications,

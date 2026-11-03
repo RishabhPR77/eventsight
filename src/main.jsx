@@ -5,6 +5,7 @@ import "@fontsource-variable/bricolage-grotesque";
 import "@fontsource-variable/figtree";
 import { AuthProvider } from "./context/AuthContext";
 import { RealtimeProvider } from "./context/RealtimeContext";
+import { CelebrationProvider } from "./components/ui/Celebration";
 import { ConfirmProvider } from "./components/ui/Confirm";
 import ErrorBoundary from "./components/ui/ErrorBoundary";
 import "./index.css";
@@ -15,11 +16,13 @@ createRoot(document.getElementById("root")).render(
     <ErrorBoundary>
       <BrowserRouter>
         <AuthProvider>
-          <RealtimeProvider>
-            <ConfirmProvider>
-              <App />
-            </ConfirmProvider>
-          </RealtimeProvider>
+          <CelebrationProvider>
+            <RealtimeProvider>
+              <ConfirmProvider>
+                <App />
+              </ConfirmProvider>
+            </RealtimeProvider>
+          </CelebrationProvider>
         </AuthProvider>
       </BrowserRouter>
     </ErrorBoundary>

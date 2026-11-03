@@ -8,6 +8,7 @@ import EventForm from "@/components/events/EventForm";
 import OfferHistory from "@/components/events/OfferHistory";
 import OfferModal from "@/components/events/OfferModal";
 import Button from "@/components/ui/Button";
+import { useCelebrate } from "@/components/ui/Celebration";
 import { useConfirm } from "@/components/ui/Confirm";
 import { RatingSlider } from "@/components/ui/Field";
 import Modal, { ModalBody, ModalFooter } from "@/components/ui/Modal";
@@ -37,6 +38,7 @@ function Fact({ label, value }) {
 }
 
 function ConfirmDealModal({ application, eventId, onClose, onDone }) {
+  const celebrate = useCelebrate();
   const [rating, setRating] = useState(0.7);
   const [saving, setSaving] = useState(false);
   const brand = application?.brand?.brandName || application?.sponsor?.username || "this sponsor";
@@ -44,8 +46,12 @@ function ConfirmDealModal({ application, eventId, onClose, onDone }) {
   const submit = async () => {
     setSaving(true);
     try {
-      await confirmSponsorshipAsOrganizer(eventId, application._id, rating);
-      toast.success("Sponsorship confirmed");
+      const res = await confirmSponsorshipAsOrganizer(eventId, application._id, rating);
+      if (res.data?.sponsorConfirmedAt) {
+        celebrate({ big: true, title: "Sponsorship complete", message: `Both sides confirmed your sponsorship with ${brand}.` });
+      } else {
+        toast.success("Sponsorship confirmed");
+      }
       onDone();
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -155,12 +161,14 @@ export default function OrganizerEventPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const celebrate = useCelebrate();
   const [tab, setTab] = useState("offers");
   const [editing, setEditing] = useState(false);
   const [decidingId, setDecidingId] = useState(null);
   const [confirming, setConfirming] = useState(null);
   const [countering, setCountering] = useState(null);
   const [cancelling, setCancelling] = useState(null);
+  const [reposting, setReposting] = useState(false);
 
   const event = useResource(() => getOrganizerEventById(id).then((res) => res.data), [id]);
   const applications = useResource(() => getEventApplications(id).then((res) => res.data), [id]);
@@ -191,7 +199,11 @@ export default function OrganizerEventPage() {
     setDecidingId(application._id);
     try {
       await updateApplicationStatus(id, application._id, status);
-      toast.success(accepting ? "Offer accepted" : "Offer rejected");
+      if (accepting) {
+        celebrate({ big: true, title: "Deal agreed!", amount: rupees(application.negotiations?.at(-1)?.amount), message: `${brand} is sponsoring ${detail.eventName}.` });
+      } else {
+        toast.success("Offer rejected");
+      }
       applications.reload();
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -291,6 +303,18 @@ export default function OrganizerEventPage() {
         </div>
       </Card>
 
+      {hasAccepted && !eventDone ? (
+        <Card surface="border-good/20 bg-good-soft" className="mt-6 flex flex-wrap items-center gap-4 p-5">
+          <div className="min-w-0 flex-1 basis-60">
+            <h2 className="text-lg font-semibold">This event has its sponsor</h2>
+            <p className="text-sm text-ink-soft">Other sponsors no longer see it. To find another sponsor, post it again with what you need.</p>
+          </div>
+          <Button variant="secondary" onClick={() => setReposting(true)}>
+            <Repeat2 className="h-4 w-4" aria-hidden="true" />Post again
+          </Button>
+        </Card>
+      ) : null}
+
       <section className="mt-6">
         <Tabs
           className="mb-4"
@@ -359,6 +383,16 @@ export default function OrganizerEventPage() {
         onSaved={() => {
           setEditing(false);
           event.reload();
+        }}
+      />
+
+      <EventForm
+        open={reposting}
+        copyOf={detail}
+        onClose={() => setReposting(false)}
+        onSaved={(created) => {
+          setReposting(false);
+          navigate(`/organizer/event/${created._id}`);
         }}
       />
 

@@ -5,9 +5,10 @@ import { ArrowLeft, CalendarDays, MapPin, MessageCircle, Sparkles, Star } from "
 import CancelDealModal from "@/components/events/CancelDealModal";
 import DealProgress from "@/components/events/DealProgress";
 import { EventCover } from "@/components/events/EventCard";
-import OfferHistory from "@/components/events/OfferHistory";
+import OfferTimeline from "@/components/events/OfferTimeline";
 import OfferModal from "@/components/events/OfferModal";
 import Button from "@/components/ui/Button";
+import { useCelebrate } from "@/components/ui/Celebration";
 import { useConfirm } from "@/components/ui/Confirm";
 import { Input, RatingSlider, Textarea } from "@/components/ui/Field";
 import Modal, { ModalBody, ModalFooter } from "@/components/ui/Modal";
@@ -42,14 +43,16 @@ function Fact({ label, value }) {
 
 function ApplyModal({ open, ask, eventId, onClose, onDone }) {
   const [submitting, setSubmitting] = useState(false);
+  const celebrate = useCelebrate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     const form = new FormData(e.currentTarget);
     try {
-      await applyToEvent(eventId, { amount: Number(form.get("amount")), message: form.get("message") });
-      toast.success("Offer sent");
+      const amount = Number(form.get("amount"));
+      await applyToEvent(eventId, { amount, message: form.get("message") });
+      celebrate({ title: "Offer sent", amount: rupees(amount), message: "We'll let you know as soon as the organizer replies." });
       onDone();
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -74,6 +77,7 @@ function ApplyModal({ open, ask, eventId, onClose, onDone }) {
 }
 
 function FeedbackModal({ existing, eventId, onClose, onDone }) {
+  const celebrate = useCelebrate();
   const [reputation, setReputation] = useState(existing?.organizerReputation ?? 0.7);
   const [lineup, setLineup] = useState(existing?.lineupQuality ?? 0.7);
   const [saving, setSaving] = useState(false);
@@ -83,7 +87,8 @@ function FeedbackModal({ existing, eventId, onClose, onDone }) {
     const payload = { organizerReputation: reputation, lineupQuality: lineup };
     try {
       await (existing ? updateEventFeedback(eventId, payload) : giveEventFeedback(eventId, payload));
-      toast.success("Thanks for your feedback");
+      if (existing) toast.success("Feedback updated");
+      else celebrate({ title: "Thanks for your feedback", message: "It helps other sponsors and sharpens future predictions." });
       onDone();
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -123,34 +128,38 @@ function DealCard({ detail, application, feedback, hasProfile, onApply, onAccept
   const cancelled = application?.status === "cancelled";
 
   let action = null;
-  if (!application && !eventDone) {
+  if (!application && !eventDone && !detail.hasSponsor) {
     action = hasProfile
-      ? <Button className="w-full" onClick={onApply}>Apply to sponsor</Button>
-      : <Button className="w-full" to="/brand">Create brand profile to apply</Button>;
+      ? <Button size="lg" onClick={onApply}>Apply to sponsor</Button>
+      : <Button size="lg" to="/brand">Create brand profile to apply</Button>;
   } else if (open && !eventDone) {
     action = (
-      <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
         {myTurn ? (
-          <div className="grid grid-cols-2 gap-2">
-            <Button variant="secondary" onClick={onCounter}>Counter</Button>
-            <Button onClick={onAccept}>Accept</Button>
-          </div>
+          <>
+            <Button size="lg" onClick={onAccept}>Accept {rupees(latest.amount)}</Button>
+            <Button size="lg" variant="secondary" onClick={onCounter}>Make a counter-offer</Button>
+          </>
         ) : null}
-        <Button variant="ghost" className="w-full" onClick={onWithdraw}>Withdraw offer</Button>
+        <Button size="lg" variant="ghost" onClick={onWithdraw}>Withdraw offer</Button>
       </div>
     );
   } else if (accepted && eventDone && !application.sponsorConfirmedAt) {
-    action = <Button className="w-full" onClick={onConfirm}>Confirm it happened</Button>;
+    action = <Button size="lg" onClick={onConfirm}>Confirm it happened</Button>;
   } else if (bothConfirmed) {
     action = (
-      <Button className="w-full" variant={feedback ? "secondary" : "primary"} onClick={onFeedback}>
+      <Button size="lg" variant={feedback ? "secondary" : "primary"} onClick={onFeedback}>
         <Star className="h-4 w-4" aria-hidden="true" />{feedback ? "Update feedback" : "Leave feedback"}
       </Button>
     );
   }
 
   let note = null;
-  if (!application) note = eventDone ? "This event has finished." : `The organizer is asking for ${rupees(detail.ask)}.`;
+  if (!application) {
+    if (eventDone) note = "This event has finished.";
+    else if (detail.hasSponsor) note = "This event already has its sponsor, so it isn't taking offers.";
+    else note = `The organizer is asking for ${rupees(detail.ask)}.`;
+  }
   else if (myTurn) note = `The organizer countered with ${rupees(latest.amount)}. Accept it or reply with your own number.`;
   else if (open && !eventDone) note = `Your offer of ${rupees(latest.amount)} is with the organizer.`;
   else if (application.status === "rejected") note = "The organizer didn't accept this offer.";
@@ -161,24 +170,66 @@ function DealCard({ detail, application, feedback, hasProfile, onApply, onAccept
   else if (accepted && application.sponsorConfirmedAt && !application.organizerConfirmedAt) note = "You confirmed. If the organizer doesn't reply within 7 days, it's confirmed automatically and feedback opens.";
   else if (accepted && application.organizerConfirmedAt && !application.sponsorConfirmedAt) note = "The organizer confirmed. If you don't reply within 7 days, it's confirmed automatically.";
 
+  const lastFrom = (side) => application?.negotiations?.findLast((offer) => offer.from === side);
+  const theirs = lastFrom("organizer");
+  const mine = lastFrom("sponsor");
+
   return (
-    <Card className="p-5">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">Your sponsorship</h2>
-        {application ? <StatusBadge status={application.status} /> : null}
-      </div>
-      {accepted ? <p className="mt-1 font-display text-2xl font-bold text-brand">{rupees(application.finalAmount)}</p> : null}
-      {open ? <p className="mt-1 font-display text-2xl font-bold text-brand">{rupees(latest?.amount)}</p> : null}
-      {cancelled ? null : (
-        <div className="mt-4">
-          <DealProgress application={application} eventDone={eventDone} hasFeedback={Boolean(feedback)} />
+    <Card className="overflow-hidden">
+      {myTurn ? (
+        <div className="bg-marigold-soft px-5 py-3 font-semibold sm:px-6">
+          Your move: the organizer countered with {rupees(latest.amount)}
         </div>
-      )}
-      {note ? <p className="mt-4 text-sm text-ink-soft">{note}</p> : null}
-      <OfferHistory negotiations={application?.negotiations} viewer="sponsor" className="mt-3" />
-      {action ? <div className="mt-4">{action}</div> : null}
-      {accepted && !bothConfirmed ? (
-        <Button variant="ghost" className="mt-2 w-full" onClick={onCancel}>Cancel sponsorship</Button>
+      ) : null}
+      <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_240px]">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-bold">Your sponsorship</h2>
+            {application ? <StatusBadge status={application.status} /> : null}
+          </div>
+
+          <dl className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl bg-paper p-4">
+              <dt className="text-sm text-ink-soft">Organizer's ask</dt>
+              <dd className="mt-1 font-display text-2xl font-bold">{rupees(detail.ask)}</dd>
+            </div>
+            {mine ? (
+              <div className="rounded-xl bg-brand-soft p-4">
+                <dt className="text-sm text-ink-soft">Your latest offer</dt>
+                <dd className="mt-1 font-display text-2xl font-bold text-brand">{rupees(mine.amount)}</dd>
+              </div>
+            ) : null}
+            {accepted ? (
+              <div className="rounded-xl bg-good-soft p-4">
+                <dt className="text-sm text-ink-soft">Agreed amount</dt>
+                <dd className="mt-1 font-display text-2xl font-bold text-good">{rupees(application.finalAmount)}</dd>
+              </div>
+            ) : theirs ? (
+              <div className="rounded-xl bg-marigold-soft p-4">
+                <dt className="text-sm text-ink-soft">Organizer's latest offer</dt>
+                <dd className="mt-1 font-display text-2xl font-bold">{rupees(theirs.amount)}</dd>
+              </div>
+            ) : null}
+          </dl>
+
+          {note ? <p className="mt-4 text-base text-ink-soft">{note}</p> : null}
+          {action || (accepted && !bothConfirmed) ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {action}
+              {accepted && !bothConfirmed ? <Button size="lg" variant="ghost" onClick={onCancel}>Cancel sponsorship</Button> : null}
+            </div>
+          ) : null}
+        </div>
+
+        {cancelled || !application ? null : (
+          <div className="lg:border-l lg:border-line lg:pl-6">
+            <h3 className="mb-3 font-semibold">Progress</h3>
+            <DealProgress application={application} eventDone={eventDone} hasFeedback={Boolean(feedback)} />
+          </div>
+        )}
+      </div>
+      {application?.negotiations?.length ? (
+        <OfferTimeline negotiations={application.negotiations} viewer="sponsor" className="border-t border-line p-5 sm:p-6" />
       ) : null}
     </Card>
   );
@@ -189,6 +240,7 @@ export default function SponsorEventPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const confirm = useConfirm();
+  const celebrate = useCelebrate();
   const [applying, setApplying] = useState(false);
   const [countering, setCountering] = useState(false);
   const [rating, setRating] = useState(false);
@@ -227,7 +279,7 @@ export default function SponsorEventPage() {
     if (!yes) return;
     try {
       await acceptOfferAsSponsor(id);
-      toast.success("Deal agreed");
+      celebrate({ big: true, title: "Deal agreed!", amount: rupees(amount), message: `You're sponsoring ${detail.eventName}.` });
       application.reload();
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -269,8 +321,12 @@ export default function SponsorEventPage() {
     });
     if (!yes) return;
     try {
-      await confirmSponsorship(id);
-      toast.success("Sponsorship confirmed");
+      const res = await confirmSponsorship(id);
+      if (res.data?.organizerConfirmedAt) {
+        celebrate({ big: true, title: "Sponsorship complete", message: "Both sides confirmed. You can now rate the event." });
+      } else {
+        toast.success("Sponsorship confirmed");
+      }
       application.reload();
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -294,7 +350,21 @@ export default function SponsorEventPage() {
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />Discover
       </Link>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <DealCard
+        detail={detail}
+        application={application.data}
+        feedback={feedback.data}
+        hasProfile={Boolean(profile.data)}
+        onApply={() => setApplying(true)}
+        onAccept={handleAccept}
+        onCounter={() => setCountering(true)}
+        onWithdraw={handleWithdraw}
+        onConfirm={handleConfirm}
+        onFeedback={() => setRating(true)}
+        onCancel={() => setCancelling(true)}
+      />
+
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <Card className="overflow-hidden">
           <EventCover event={detail} className="h-44 w-full sm:h-64" />
           <div className="p-5 sm:p-6">
@@ -331,21 +401,7 @@ export default function SponsorEventPage() {
         </Card>
 
         <div className="space-y-4 lg:sticky lg:top-8">
-          <DealCard
-            detail={detail}
-            application={application.data}
-            feedback={feedback.data}
-            hasProfile={Boolean(profile.data)}
-            onApply={() => setApplying(true)}
-            onAccept={handleAccept}
-            onCounter={() => setCountering(true)}
-            onWithdraw={handleWithdraw}
-            onConfirm={handleConfirm}
-            onFeedback={() => setRating(true)}
-            onCancel={() => setCancelling(true)}
-          />
-
-          {upcoming ? (
+          {upcoming && !(detail.hasSponsor && !application.data) ? (
             <Card surface="border-brand-strong bg-brand-strong" className="p-5">
               <h2 className="text-lg font-semibold text-white">Is this event right for you?</h2>
               <p className="mt-1 text-sm text-white/75">Get expected turnout, brand fit and the chance of a deal.</p>

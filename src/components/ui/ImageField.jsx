@@ -29,7 +29,7 @@ export default function ImageField({ name, label, current, hint = "JPG, PNG or W
   return (
     <div>
       <span className="mb-1.5 block text-sm font-semibold text-ink">{label}</span>
-      <label className={cn("group relative flex cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-line bg-paper transition hover:border-brand focus-within:ring-2 focus-within:ring-marigold", aspect)}>
+      <label className={cn("group relative flex w-full max-w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-line bg-paper transition hover:border-brand focus-within:ring-2 focus-within:ring-marigold", aspect)}>
         <input type="file" name={name} accept={TYPES.join(",")} onChange={handleChange} className="sr-only" />
         {shown ? (
           <>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import { Plus, Trash2 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import { useCelebrate } from "@/components/ui/Celebration";
 import { Input, Select, Textarea, Toggle } from "@/components/ui/Field";
 import ImageField from "@/components/ui/ImageField";
 import Modal, { ModalBody, ModalFooter } from "@/components/ui/Modal";
@@ -51,10 +52,13 @@ function SocialRows({ rows, setRows }) {
 
 const toRows = (accounts = []) => accounts.map((item) => ({ ...item, id: crypto.randomUUID() }));
 
-function EventFormBody({ event, onClose, onSaved }) {
+function EventFormBody({ event, copyOf, onClose, onSaved }) {
+  const celebrate = useCelebrate();
+  // Editing changes this event; a copy only fills in a new one
+  const initial = event || copyOf;
   const { data } = useResource(() => Promise.all([fetchEventCategories(), fetchCities()]));
   const [categories, cities] = data || [[], []];
-  const [rows, setRows] = useState(() => toRows(event?.socialMediaAccount));
+  const [rows, setRows] = useState(() => toRows(initial?.socialMediaAccount));
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -74,7 +78,8 @@ function EventFormBody({ event, onClose, onSaved }) {
 
     try {
       const res = await (event ? updateEvent(event._id, form) : createEvent(form));
-      toast.success(event ? "Event updated" : "Event published");
+      if (event) toast.success("Event updated");
+      else celebrate({ title: "Event published", message: "Sponsors can see it now and send you offers." });
       onSaved(res.data);
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -88,17 +93,17 @@ function EventFormBody({ event, onClose, onSaved }) {
   return (
     <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
       <ModalBody className="space-y-4">
-        <ImageField name="thumbnail" label="Cover image" current={event?.thumbnail} />
-        <Input label="Event name" name="eventName" defaultValue={event?.eventName} placeholder="Indore Food Festival" required />
-        <Textarea label="Description" name="eventDescription" defaultValue={event?.eventDescription} placeholder="What's the event, who comes, and what can a sponsor do there?" rows={3} required />
+        <ImageField name="thumbnail" label="Cover image" current={event?.thumbnail} hint={copyOf ? "Add the cover image again" : undefined} />
+        <Input label="Event name" name="eventName" defaultValue={initial?.eventName} placeholder="Indore Food Festival" required />
+        <Textarea label="Description" name="eventDescription" defaultValue={initial?.eventDescription} placeholder="What's the event, who comes, and what can a sponsor do there?" rows={3} required />
 
         {selectsReady ? (
           <div className="grid gap-4 sm:grid-cols-2">
-            <Select label="Category" name="eventCategory" defaultValue={event?.eventCategory?._id || ""} required>
+            <Select label="Category" name="eventCategory" defaultValue={initial?.eventCategory?._id || ""} required>
               <option value="" disabled>{categories.length ? "Choose a category" : "No categories yet"}</option>
               {categories.map((item) => <option key={item._id} value={item._id}>{titleCase(item.name)}</option>)}
             </Select>
-            <Select label="City" name="location" defaultValue={event?.location || ""} required>
+            <Select label="City" name="location" defaultValue={initial?.location || ""} required>
               <option value="" disabled>{cities.length ? "Choose a city" : "No cities yet"}</option>
               {cities.map((item) => <option key={item._id} value={item.name}>{item.name}</option>)}
             </Select>
@@ -106,16 +111,16 @@ function EventFormBody({ event, onClose, onSaved }) {
         ) : <div className="h-[74px] animate-pulse rounded-xl bg-sand" />}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Input label="Date" name="date" type="date" defaultValue={event?.date ? event.date.slice(0, 10) : ""} min={new Date().toISOString().slice(0, 10)} required />
-          <Input label="Capacity" name="capacity" type="number" min="1" defaultValue={event?.capacity} hint="How many people the venue holds" required />
-          <Input label="Sponsorship ask (₹)" name="ask" type="number" min="1" defaultValue={event?.ask} required />
-          <Input label="Ticket price (₹)" name="ticketPrice" type="number" min="0" defaultValue={event?.ticketPrice ?? 0} hint="Use 0 for a free event" required />
-          <Input label="Marketing budget (₹)" name="marketingBudget" type="number" min="0" defaultValue={event?.marketingBudget ?? 0} className="sm:col-span-2" required />
+          <Input label="Date" name="date" type="date" defaultValue={initial?.date ? initial.date.slice(0, 10) : ""} min={new Date().toISOString().slice(0, 10)} required />
+          <Input label="Capacity" name="capacity" type="number" min="1" defaultValue={initial?.capacity} hint="How many people the venue holds" required />
+          <Input label="Sponsorship ask (₹)" name="ask" type="number" min="1" defaultValue={initial?.ask} required />
+          <Input label="Ticket price (₹)" name="ticketPrice" type="number" min="0" defaultValue={initial?.ticketPrice ?? 0} hint="Use 0 for a free event" required />
+          <Input label="Marketing budget (₹)" name="marketingBudget" type="number" min="0" defaultValue={initial?.marketingBudget ?? 0} className="sm:col-span-2" required />
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <Toggle name="isIndoor" label="Indoor event" defaultChecked={Boolean(event?.isIndoor)} />
-          <Toggle name="isFestive" label="During a festival" defaultChecked={Boolean(event?.isFestive)} />
+          <Toggle name="isIndoor" label="Indoor event" defaultChecked={Boolean(initial?.isIndoor)} />
+          <Toggle name="isFestive" label="During a festival" defaultChecked={Boolean(initial?.isFestive)} />
         </div>
 
         <SocialRows rows={rows} setRows={setRows} />
@@ -128,10 +133,12 @@ function EventFormBody({ event, onClose, onSaved }) {
   );
 }
 
-export default function EventForm({ open, event, onClose, onSaved }) {
+export default function EventForm({ open, event, copyOf, onClose, onSaved }) {
+  const title = event ? "Edit event" : copyOf ? "Post this event again" : "Create an event";
+  const description = event ? null : copyOf ? "Change what you need from a sponsor, then publish it as a new listing." : "Sponsors will see this once you publish.";
   return (
-    <Modal open={open} onClose={onClose} size="lg" title={event ? "Edit event" : "Create an event"} description={event ? null : "Sponsors will see this once you publish."}>
-      {open ? <EventFormBody event={event} onClose={onClose} onSaved={onSaved} /> : null}
+    <Modal open={open} onClose={onClose} size="lg" title={title} description={description}>
+      {open ? <EventFormBody event={event} copyOf={copyOf} onClose={onClose} onSaved={onSaved} /> : null}
     </Modal>
   );
 }

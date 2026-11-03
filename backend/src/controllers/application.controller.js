@@ -8,7 +8,7 @@ const { ApiResponse } = require("../utility/ApiResponse")
 const { asyncHandler } = require("../utility/AsyncHandler")
 const { postDealUpdate } = require("../utility/chatService")
 const { eventCutoff } = require("../utility/eventDates")
-const { isEventFinished, OPEN_STATUSES } = require("../utility/dealRules")
+const { hasOtherSponsor, isEventFinished, OPEN_STATUSES } = require("../utility/dealRules")
 const { notify } = require("../utility/notifier")
 
 const MAX_MESSAGE_LENGTH = 1000
@@ -140,6 +140,38 @@ const addCounterOffer = async (application, from, offer) => {
     await application.save()
 }
 
+const TAKEN_MESSAGE = "This event already has its sponsor"
+
+const assertNoOtherSponsor = async (event, sponsorId) => {
+    if (await hasOtherSponsor(event._id, sponsorId)) {
+        throw new ApiError(409, TAKEN_MESSAGE)
+    }
+}
+
+// The event now has its sponsor, so the other open offers end here
+const closeOtherOffers = async (event, winnerId) => {
+    const others = await SponsorApplication.find({
+        event: event._id,
+        _id: { $ne: winnerId },
+        status: { $in: OPEN_STATUSES },
+        isDeleted: false
+    }).select("sponsor").lean()
+
+    if (!others.length) return
+
+    await SponsorApplication.updateMany(
+        { _id: { $in: others.map((item) => item._id) }, status: { $in: OPEN_STATUSES } },
+        { $set: { status: "rejected" } }
+    )
+    await Promise.all(others.map((item) => notify({
+        user: item.sponsor,
+        type: "rejected",
+        title: "This event found its sponsor",
+        body: `${event.eventName} is no longer taking offers`,
+        link: sponsorLink(event._id)
+    })))
+}
+
 // Matching on the open statuses keeps a concurrent decision from being overwritten
 const closeNegotiation = async (application, update) => {
     const updated = await SponsorApplication.findOneAndUpdate(
@@ -179,6 +211,8 @@ const applyToEvent = asyncHandler(async (req, res) => {
     if (!event) {
         throw new ApiError(404, "Event not found or no longer open for applications")
     }
+
+    await assertNoOtherSponsor(event, req.user._id)
 
     // The unique {sponsor, event} index is what enforces one application per event
     let application
@@ -274,14 +308,13 @@ const getEventApplications = asyncHandler(async (req, res) => {
     )
 })
 
-// Every open deal across the organizer's events, for the dashboard to-do list
+// Every offer across the organizer's events, for the Offers page and dashboard totals
 const getOrganizerApplications = asyncHandler(async (req, res) => {
 
     const events = await Organizer.find({ organizer: req.user._id, isDeleted: false }).select("_id")
 
     const applications = await SponsorApplication.find({
         event: { $in: events.map((event) => event._id) },
-        status: { $in: [...OPEN_STATUSES, "accepted"] },
         isDeleted: false
     })
         .populate("sponsor", "username")
@@ -413,7 +446,9 @@ const updateApplicationStatus = asyncHandler(async (req, res) => {
     }
 
     const accepted = status === "accepted"
+    if (accepted) await assertNoOtherSponsor(event, application.sponsor)
     const updated = await closeNegotiation(application, accepted ? { status, finalAmount: latest.amount } : { status })
+    if (accepted) await closeOtherOffers(event, application._id)
 
     await dealUpdate(event, application.sponsor, req.user._id, "organizer", accepted ? `Deal agreed at ${inr(latest.amount)}` : "The organizer rejected this offer")
     await notify({
@@ -489,7 +524,9 @@ const acceptAsSponsor = asyncHandler(async (req, res) => {
         throw new ApiError(409, "That's your own offer. Wait for the organizer to reply")
     }
 
+    await assertNoOtherSponsor(event, req.user._id)
     const updated = await closeNegotiation(application, { status: "accepted", finalAmount: latest.amount })
+    await closeOtherOffers(event, application._id)
 
     const brand = await brandNameOf(req.user._id)
     await dealUpdate(event, req.user._id, req.user._id, "sponsor", `Deal agreed at ${inr(latest.amount)}`)

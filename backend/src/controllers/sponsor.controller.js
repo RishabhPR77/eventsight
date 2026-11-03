@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { default: mongoose } = require("mongoose");
 const { Prediction } = require("../models/prediction.model");
+const { hasOtherSponsor, sponsoredEventIds } = require("../utility/dealRules");
 const { EventCategory } = require("../models/eventCategory.model");
 const { Organizer } = require("../models/organizer.model");
 const { BrandType } = require("../models/sponserBrandTypes.model");
@@ -230,7 +231,9 @@ const getAllEvents = asyncHandler(async (req, res) => {
 
     const filter = {
         isDeleted: false,
-        date: { $gte: eventCutoff() }
+        date: { $gte: eventCutoff() },
+        // Events another brand already sponsors are hidden
+        _id: { $nin: await sponsoredEventIds(req.user._id) }
     }
 
     applyEventFilters(filter, req.query)
@@ -453,7 +456,11 @@ const getEventById = asyncHandler(async (req, res) => {
     return res.status(200).json(
         new ApiResponse(
             200,
-            { ...event[0], ...(await getOrganizerRatings(pastEvents.map((item) => item._id))) },
+            {
+                ...event[0],
+                ...(await getOrganizerRatings(pastEvents.map((item) => item._id))),
+                hasSponsor: Boolean(await hasOtherSponsor(event[0]._id, req.user._id))
+            },
             "Event fetched successfully"
         )
     )

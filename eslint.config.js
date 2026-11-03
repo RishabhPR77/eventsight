@@ -25,7 +25,7 @@ export default defineConfig([
     rules: {
       // Components used only in JSX look unused to this rule, even as renamed props
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^[A-Z_]' }],
-      'react-refresh/only-export-components': ['error', { allowExportNames: ['useAuth', 'useConfirm', 'useRealtime'] }],
+      'react-refresh/only-export-components': ['error', { allowExportNames: ['useAuth', 'useCelebrate', 'useConfirm', 'useRealtime'] }],
     },
   },
 ])
