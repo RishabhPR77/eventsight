@@ -21,7 +21,8 @@ const toHttpError = (err) => {
     }
 
     const { statusCode } = err;
-    if (typeof statusCode === "number" && statusCode >= 100 && statusCode < 500) {
+    // Server errors stay hidden unless the message was written for users
+    if (typeof statusCode === "number" && statusCode >= 100 && (statusCode < 500 || err.expose)) {
         return { statusCode, message: err.message };
     }
 

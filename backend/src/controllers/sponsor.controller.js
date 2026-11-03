@@ -11,7 +11,7 @@ const { asyncHandler } = require("../utility/AsyncHandler");
 const { uploadOnCloudinary } = require("../utility/cloudinary");
 const { eventCreate } = require("./organizer.controller");
 const {EventFeedBack}=require("../models/eventFeedBack.model")
-const { postToMl } = require("../utility/mlClient")
+const { mlFailure, postToMl } = require("../utility/mlClient")
 const { escapeRegex } = require("../utility/escapeRegex")
 const { eventCutoff } = require("../utility/eventDates")
 const { SponsorApplication } = require("../models/sponsorApplication.model")
@@ -713,15 +713,14 @@ const getPrediction = asyncHandler(async (req, res) => {
     try {
         analyzeBrandResponse = await postToMl("/analyze-brand", brandInput)
     } catch (error) {
-        throw new ApiError(500, "Brand analysis failed")
+        throw mlFailure(error, "/analyze-brand")
     }
 
     let predictResponse
     try {
         predictResponse = await postToMl("/predict", predictInput)
     } catch (error) {
-        console.log(error.response?.data);
-        throw new ApiError(500, "Prediction failed")
+        throw mlFailure(error, "/predict")
     }
 
     const result = {
