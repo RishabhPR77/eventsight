@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Compass, Handshake, History, Inbox, LayoutDashboard, LogOut, MessagesSquare, Settings, Sparkles, Store } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useRealtime } from "@/context/RealtimeContext";
+import { wakeMlService } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Primitives";
 import Logo from "@/components/ui/Logo";
@@ -82,6 +84,10 @@ export default function AppShell({ children }) {
   const { unreadMessages } = useRealtime();
   const navigate = useNavigate();
   const items = NAV[user?.role] || NAV.organizer;
+
+  useEffect(() => {
+    if (user?.role === "sponsor") wakeMlService();
+  }, [user?.role]);
 
   const handleSignOut = async () => {
     await signOut();

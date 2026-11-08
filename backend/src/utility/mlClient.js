@@ -43,4 +43,15 @@ const mlFailure = (error, path) => {
   return failure;
 };
 
-module.exports = { postToMl, mlFailure };
+// A visit to the site starts waking the sleeping ML service, so the first analysis
+// isn't the one that waits. At most once a minute, however many people arrive.
+const WAKE_EVERY_MS = 60000;
+let lastWake = 0;
+
+const wakeMl = () => {
+  if (Date.now() - lastWake < WAKE_EVERY_MS) return;
+  lastWake = Date.now();
+  axios.get(`${process.env.ML_API_URL}/health`, { timeout: ML_TIMEOUT_MS }).catch(() => {});
+};
+
+module.exports = { postToMl, mlFailure, wakeMl };

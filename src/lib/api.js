@@ -9,6 +9,19 @@ const ML_TIMEOUT_MS = 130000;
 
 export const SOCKET_URL = BACKEND_BASE.replace(/\/api\/?$/, "");
 
+// Free hosting sleeps, and only sponsors use the AI. When a sponsor opens the app the
+// API wakes the ML service in the background, once per browser session. Plain fetch,
+// so it doesn't trigger the "waking up" banner by itself.
+export function wakeMlService() {
+  try {
+    if (sessionStorage.getItem("mlWoken")) return;
+    sessionStorage.setItem("mlWoken", "1");
+  } catch {
+    // Storage can be blocked; waking anyway is harmless
+  }
+  fetch(`${BACKEND_BASE}ml/wake`).catch(() => {});
+}
+
 // Free hosting sleeps when idle and takes about a minute to wake
 const DEFAULT_TIMEOUT_MS = 70000;
 
