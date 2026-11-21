@@ -1,0 +1,122 @@
+{
+  "model_version": "sponsorwise-xgb-1.0",
+  "created_at": "2026-11-21T04:31:04Z",
+  "artifacts": {
+    "scaler": {
+      "file": "feature_scaler.pkl",
+      "sha256": "5fab3c004f7a3b6813f0db6306a5db1ceac924c28ab2416af3850d286df0b9d8"
+    },
+    "attendance_model": {
+      "file": "stage1_attendance_xgboost.pkl",
+      "sha256": "19cece85361d73b666004bb0999c45525432fb8b7816d8bd9a09f742362de3e5"
+    },
+    "feasibility_model": {
+      "file": "stage2_sponsor_xgboost.pkl",
+      "sha256": "ccd68b72859cf42ce2a5f0e9e810efd37289071ee6c014d5987625b49e5e362d"
+    }
+  },
+  "feature_columns": [
+    "month",
+    "day_of_week",
+    "is_weekend",
+    "is_festive",
+    "is_indoor",
+    "temperature",
+    "is_raining",
+    "humidity",
+    "venue_capacity",
+    "ticket_price",
+    "marketing_budget",
+    "organizer_reputation",
+    "lineup_quality",
+    "social_media_reach",
+    "past_events_organized",
+    "competing_events",
+    "brand_annual_budget",
+    "brand_activation_maturity",
+    "fit_score",
+    "sponsor_amount",
+    "city_Burhanpur",
+    "city_Chhindwara",
+    "city_Damoh",
+    "city_Dewas",
+    "city_Gwalior",
+    "city_Indore",
+    "city_Jabalpur",
+    "city_Katni",
+    "city_Khandwa",
+    "city_Khargone",
+    "city_Mandsaur",
+    "city_Morena",
+    "city_Narmadapuram",
+    "city_Neemuch",
+    "city_Ratlam",
+    "city_Rewa",
+    "city_Sagar",
+    "city_Satna",
+    "city_Sehore",
+    "city_Seoni",
+    "city_Shivpuri",
+    "city_Singrauli",
+    "city_Ujjain",
+    "city_Vidisha",
+    "event_type_College Fest",
+    "event_type_Cricket Screening",
+    "event_type_Food Festival",
+    "event_type_Music Concert",
+    "event_type_Religious/Cultural",
+    "event_type_Sports Tournament",
+    "event_type_Standup Comedy",
+    "event_type_Tech Meetup",
+    "brand_category_Automobile",
+    "brand_category_Beauty/Personal Care",
+    "brand_category_Beverage",
+    "brand_category_Edtech",
+    "brand_category_FMCG",
+    "brand_category_Fintech",
+    "brand_category_Local Retail",
+    "brand_category_Real Estate",
+    "brand_category_Telecom",
+    "brand_kpi_hybrid",
+    "brand_kpi_leads",
+    "brand_kpi_sales",
+    "brand_city_focus_metro",
+    "brand_city_focus_pilgrimage",
+    "brand_city_focus_tier2"
+  ],
+  "training": {
+    "dataset": {
+      "raw_file_sha256": "e138019c332eba5b08a395ca0bdfe3c33de2b147338492b0a5f83a7091fa0009",
+      "feature_file_sha256": "a11fdfcf21db388978e2f660bd613ea0fb9b4a5a3e89b9749c0d188f4ab72430",
+      "rows": 70000,
+      "events": 10000,
+      "feasible_rate": 0.3473
+    },
+    "evaluation": {
+      "split": "GroupShuffleSplit by event_id, 20% of events held out",
+      "stage1_attendance": {
+        "r2": 0.9221,
+        "mae": 2230.7
+      },
+      "stage2_feasibility": {
+        "accuracy": 0.8063,
+        "f1_feasible": 0.7262,
+        "roc_auc": 0.8552
+      }
+    },
+    "parameters": {
+      "seed": 42,
+      "stage1": "XGBRegressor(n_estimators=100)",
+      "stage2": "XGBClassifier(scale_pos_weight=negatives/positives)",
+      "stage2_class_weight": 1.879,
+      "stage2_input": "67 scaled features + out-of-fold stage 1 prediction"
+    },
+    "libraries": {
+      "python": "3.12.10",
+      "xgboost": "2.0.3",
+      "scikit-learn": "1.4.2",
+      "numpy": "2.2.6",
+      "pandas": "2.2.3"
+    }
+  }
+}

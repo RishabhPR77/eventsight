@@ -1,0 +1,8 @@
+# Everything the service needs, plus what's needed to run the notebooks and tests
+-r requirements.txt
+pytest==9.1.1
+httpx==0.28.1
+lightgbm==4.6.0
+matplotlib==3.10.0
+nbconvert==7.16.6
+ipykernel==6.29.5

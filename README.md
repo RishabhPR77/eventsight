@@ -120,10 +120,13 @@ SponsorWise/
 │       │                       # chatService, dealRules, mlClient and helpers
 │       └── db/                 # MongoDB connection
 │
-├── ml-service/                 # FastAPI ML microservice (Rishabh)
-│   ├── main.py                 # Full pipeline - predictions + AI insights
-│   ├── train.ipynb             # Model training notebook
-│   ├── preprocess.ipynb        # Data preprocessing notebook
+├── ml-service/                 # FastAPI ML microservice (Rishabh), see ml-service/README.md
+│   ├── 1_data_preparation.ipynb        # Statistics, trends, leakage removal, features
+│   ├── 2_model_training.ipynb          # Model comparison, two-stage training, evaluation
+│   ├── main.py                         # Entry point (uvicorn main:app)
+│   ├── sponsorwise_ml/                 # The service: api, pipeline, features, scoring, llm…
+│   ├── tests/                          # Unit and API tests
+│   ├── model_manifest.json             # Model version, file fingerprints, metrics
 │   ├── mp_sponsorwise_dataset.csv      # Raw synthetic dataset (~70k rows)
 │   ├── mp_sponsorwise_ml_features.csv  # Engineered feature set
 │   ├── feature_scaler.pkl              # Fitted StandardScaler (67 features)
@@ -165,8 +168,10 @@ Each event has 7 rows (one per candidate brand), so all splits are grouped by `e
 | Model | Metric | Score |
 |---|---|---|
 | Stage 1 (attendance) | R² | 0.922 |
+| Stage 1 (attendance) | MAE | 2,231 people |
 | Stage 2 (feasibility) | Accuracy | 0.81 |
 | Stage 2 (feasibility) | F1, feasible class | 0.73 |
+| Stage 2 (feasibility) | ROC-AUC | 0.855 |
 
 The data is synthetic, so these scores describe how well the models recover the generator, not real-world accuracy.
 
@@ -198,10 +203,13 @@ Pure-Python fallbacks exist for all AI outputs - the service is fully functional
 
 - **Canonical normalization** - all event types and brand categories are normalized via regex before lookup, fixing a bug where hyphenated strings like `"stand-up comedy"` were never matched.
 - **No circular budget inflation** - `brand_annual_budget` is never derived from `sponsor_amount` to avoid input leakage.
-- **API key auth** - protected routes require `X-API-Key` header; unauthenticated in local dev when key is unset. Only the backend holds the key: the browser reaches the ML service through `/api/ml/*`.
+- **API key auth** - protected routes require `X-API-Key` (compared in constant time); the service refuses to start without one outside local dev. Only the backend holds the key: the browser reaches the ML service through `/api/ml/*`.
 - **Reference categories** - `Apparel` and `Business Conference` were dropped by `get_dummies(drop_first=True)`, so they are valid inputs encoded as all zeros.
+- **Reproducible training** - fixed seeds and pinned versions: the notebooks rebuild the deployed model files byte for byte.
+- **Verified model loading** - each `.pkl` is checked against the SHA-256 in `model_manifest.json` before loading, since pickles can run code.
+- **No training-serving skew** - a test encodes raw dataset rows the way the live service does and checks they match the training features.
+- **Prompt safety** - user-written text is fenced as data the LLM must not obey, and every AI reply is validated field by field.
 - **Request tracing** - every response carries `X-Request-ID` and `X-Response-Time-Ms` headers.
-- **NumPy pickle shim** - handles cross-version compatibility when loading `.pkl` artifacts.
 
 ### Endpoints
 
