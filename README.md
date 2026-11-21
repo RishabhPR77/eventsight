@@ -108,7 +108,7 @@ SponsorWise/
 │       ├── models/             # User, Organizer, Sponsor, SponsorApplication,
 │       │                       # Prediction, Notification, Conversation, Message,
 │       │                       # OTP, EventCategory, EventFeedBack, City,
-│       │                       # SponsorBrandTypes, Admin
+│       │                       # SponsorBrandTypes
 │       ├── routes/             # auth, organizer, sponsor, admin, chat, ml,
 │       │                       # notification
 │       ├── middleware/         # auth, admin, role check, multer, validation,
@@ -284,7 +284,7 @@ A Node.js + Express REST API that manages all application data, user authenticat
 
 ### Database Models
 
-`User` · `Organizer` (events) · `Sponser` (sponsor profiles) · `SponsorApplication` · `Prediction` (saved analyses) · `Notification` · `Conversation` · `Message` · `OTP` · `EventCategory` · `EventFeedBack` · `City` · `SponsorBrandTypes` · `Admin`
+`User` · `Organizer` (events) · `Sponser` (sponsor profiles) · `SponsorApplication` · `Prediction` (saved analyses) · `Notification` · `Conversation` · `Message` · `OTP` · `EventCategory` · `EventFeedBack` · `City` · `SponsorBrandTypes`
 
 ---
 
