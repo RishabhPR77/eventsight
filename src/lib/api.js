@@ -1,26 +1,11 @@
 import axios from "axios";
+import { BACKEND_BASE } from "./config";
+import { ensureAi, markAiAwake } from "./wake";
 
-// Node backend base URL (the app talks only to this; it holds the ML API key)
-const rawBase = import.meta.env.VITE_BACKEND_BASE_URL || "http://localhost:8080/api";
-export const BACKEND_BASE = rawBase.endsWith("/") ? rawBase : rawBase + "/";
+export { BACKEND_BASE, SOCKET_URL } from "./config";
 
-// Free hosting sleeps, so a prediction can include the ML service waking up
+// AI requests wait for the ML service first, so this only covers the work itself
 const ML_TIMEOUT_MS = 130000;
-
-export const SOCKET_URL = BACKEND_BASE.replace(/\/api\/?$/, "");
-
-// Free hosting sleeps, and only sponsors use the AI. When a sponsor opens the app the
-// API wakes the ML service in the background, once per browser session. Plain fetch,
-// so it doesn't trigger the "waking up" banner by itself.
-export function wakeMlService() {
-  try {
-    if (sessionStorage.getItem("mlWoken")) return;
-    sessionStorage.setItem("mlWoken", "1");
-  } catch {
-    // Storage can be blocked; waking anyway is harmless
-  }
-  fetch(`${BACKEND_BASE}ml/wake`).catch(() => {});
-}
 
 // Free hosting sleeps when idle and takes about a minute to wake
 const DEFAULT_TIMEOUT_MS = 70000;
@@ -125,14 +110,20 @@ backend.interceptors.response.use(undefined, async (error) => {
 // ML calls via backend (playground)
 // ─────────────────────────────
 
-export async function analyzeBrand(payload) {
-  const { data } = await backend.post("ml/analyze-brand", payload, { timeout: ML_TIMEOUT_MS });
+// Shows the "starting the AI" ring if the ML service is asleep, then runs the request
+async function withAi(request) {
+  await ensureAi();
+  const { data } = await request();
+  markAiAwake();
   return data;
 }
 
-export async function predictDeal(payload) {
-  const { data } = await backend.post("ml/predict", payload, { timeout: ML_TIMEOUT_MS });
-  return data;
+export function analyzeBrand(payload) {
+  return withAi(() => backend.post("ml/analyze-brand", payload, { timeout: ML_TIMEOUT_MS }));
+}
+
+export function predictDeal(payload) {
+  return withAi(() => backend.post("ml/predict", payload, { timeout: ML_TIMEOUT_MS }));
 }
 
 // ─────────────────────────────
@@ -331,10 +322,12 @@ export async function updateEventFeedback(eventId, payload) {
   return data;
 }
 
-// Backend → ML prediction chain
+// Backend → ML prediction chain. A saved analysis needs no AI, so it's asked for first
+// and the ring only appears when a fresh one has to be made.
 export async function getEventPrediction(eventId) {
-  const { data } = await backend.get(`sponsor/predict/${eventId}`, { timeout: ML_TIMEOUT_MS });
-  return data;
+  const saved = await backend.get(`sponsor/predict/${eventId}`, { params: { savedOnly: 1 } });
+  if (saved.status === 200 && saved.data?.data) return saved.data;
+  return withAi(() => backend.get(`sponsor/predict/${eventId}`, { timeout: ML_TIMEOUT_MS }));
 }
 
 export async function withdrawApplication(eventId) {

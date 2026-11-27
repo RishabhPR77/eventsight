@@ -1,9 +1,9 @@
 import { useEffect } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Compass, Handshake, History, Inbox, LayoutDashboard, LogOut, MessagesSquare, Settings, Sparkles, Store } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useRealtime } from "@/context/RealtimeContext";
-import { wakeMlService } from "@/lib/api";
+import { wakeAi } from "@/lib/wake";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Primitives";
 import Logo from "@/components/ui/Logo";
@@ -83,11 +83,15 @@ export default function AppShell({ children }) {
   const { user, signOut } = useAuth();
   const { unreadMessages } = useRealtime();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const items = NAV[user?.role] || NAV.organizer;
 
+  // Only sponsors use the AI. Starting it in the background as they sign in and
+  // move around (opening an event, the predictor) means it's usually up before they
+  // ask for an analysis. Cheap to repeat: a recent "awake" is remembered.
   useEffect(() => {
-    if (user?.role === "sponsor") wakeMlService();
-  }, [user?.role]);
+    if (user?.role === "sponsor") wakeAi();
+  }, [user?.role, pathname]);
 
   const handleSignOut = async () => {
     await signOut();

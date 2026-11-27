@@ -1,11 +1,14 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import AppShell from "@/components/layout/AppShell";
 import WakeBanner from "@/components/layout/WakeBanner";
+import { AiWakeOverlay, ServerGate, ServerWaitScreen } from "@/components/layout/WakeScreen";
 import { PageSpinner } from "@/components/ui/Primitives";
 import { useAuth } from "@/context/AuthContext";
+import { useServerStatus } from "@/hooks/useServerStatus";
 import { wasSignedIn } from "@/lib/session";
+import { wakeServer } from "@/lib/wake";
 
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const RoleLandingPage = lazy(() => import("./pages/RoleLandingPage"));
@@ -29,9 +32,16 @@ const MessagesPage = lazy(() => import("./pages/MessagesPage"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
 const LegalPage = lazy(() => import("./pages/LegalPage"));
 
+// While the session check waits on a sleeping server, say so instead of spinning silently
+function SessionCheck() {
+  const { status, retry } = useServerStatus();
+  if (status === "awake") return <PageSpinner label="Getting things ready…" />;
+  return <ServerWaitScreen failed={status === "failed"} onRetry={retry} />;
+}
+
 function Home() {
   const { user, ready } = useAuth();
-  if (!ready && wasSignedIn()) return <PageSpinner label="Getting things ready…" />;
+  if (!ready && wasSignedIn()) return <SessionCheck />;
   if (!user) return <LandingPage />;
   return (
     <AppShell>
@@ -46,7 +56,7 @@ function RequireAuth({ role }) {
   const { user, ready } = useAuth();
   const location = useLocation();
 
-  if (!ready) return <PageSpinner label="Getting things ready…" />;
+  if (!ready) return <SessionCheck />;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   if (role && user.role !== role) return <Navigate to="/" replace />;
 
@@ -67,9 +77,16 @@ function PublicOnly() {
 }
 
 export default function App() {
+  // Start waking the server the moment anyone opens the site, so it's usually
+  // up by the time they click "Sign in" or "Get started"
+  useEffect(() => {
+    wakeServer();
+  }, []);
+
   return (
     <>
       <WakeBanner />
+      <AiWakeOverlay />
       <Toaster
         position="top-center"
         toastOptions={{
@@ -84,12 +101,17 @@ export default function App() {
           <Route element={<PublicOnly />}>
             <Route path="/for-organizers" element={<RoleLandingPage role="organizer" />} />
             <Route path="/for-sponsors" element={<RoleLandingPage role="sponsor" />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            {/* These forms talk to the server, so they open once it's awake */}
+            <Route element={<ServerGate />}>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+            </Route>
           </Route>
-          <Route path="/verify-otp" element={<VerifyOtpPage />} />
+          <Route element={<ServerGate />}>
+            <Route path="/verify-otp" element={<VerifyOtpPage />} />
+          </Route>
           <Route path="/privacy" element={<LegalPage document="privacy" />} />
           <Route path="/terms" element={<LegalPage document="terms" />} />
 

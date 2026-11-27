@@ -21,9 +21,11 @@ const emailChangeLimiter = limiter(60, 10, "Too many requests. Please try again 
 });
 
 // Each prediction uses up to 3 Groq calls from a shared daily quota. Runs after
-// verifyJwt, so the limit is per user rather than per IP.
+// verifyJwt, so the limit is per user rather than per IP. Reading a saved analysis
+// makes no Groq call, so it isn't counted.
 const predictionLimiter = limiter(10, 20, "Prediction limit reached. Please try again in a few minutes.", {
-    keyGenerator: (req) => req.user._id.toString()
+    keyGenerator: (req) => req.user._id.toString(),
+    skip: (req) => req.query.savedOnly === "1"
 });
 
 module.exports = { authLimiter, emailLimiter, emailChangeLimiter, predictionLimiter };

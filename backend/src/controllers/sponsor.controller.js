@@ -716,6 +716,11 @@ const getPrediction = asyncHandler(async (req, res) => {
         )
     }
 
+    // The site asks for a saved analysis first, so it only waits for the AI to wake when it must
+    if (req.query.savedOnly === "1") {
+        return res.status(204).end()
+    }
+
     let analyzeBrandResponse
     try {
         analyzeBrandResponse = await postToMl("/analyze-brand", brandInput)

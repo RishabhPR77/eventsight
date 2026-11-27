@@ -43,15 +43,25 @@ const mlFailure = (error, path) => {
   return failure;
 };
 
-// A visit to the site starts waking the sleeping ML service, so the first analysis
-// isn't the one that waits. At most once a minute, however many people arrive.
-const WAKE_EVERY_MS = 60000;
-let lastWake = 0;
+// The site asks this to start the sleeping ML service early, and polls it while it
+// shows "starting the AI". Any request makes Render begin waking the service, even
+// one that times out, and checks within a few seconds share one answer.
+const STATUS_TIMEOUT_MS = 4000;
+const STATUS_FRESH_MS = 2000;
+let lastStatus = { ready: false, at: 0 };
+let statusCheck = null;
 
-const wakeMl = () => {
-  if (Date.now() - lastWake < WAKE_EVERY_MS) return;
-  lastWake = Date.now();
-  axios.get(`${process.env.ML_API_URL}/health`, { timeout: ML_TIMEOUT_MS }).catch(() => {});
+const mlIsReady = () => {
+  if (Date.now() - lastStatus.at < STATUS_FRESH_MS) return Promise.resolve(lastStatus.ready);
+  statusCheck ??= axios
+    .get(`${process.env.ML_API_URL}/health`, { timeout: STATUS_TIMEOUT_MS })
+    .then(() => true, () => false)
+    .then((ready) => {
+      lastStatus = { ready, at: Date.now() };
+      statusCheck = null;
+      return ready;
+    });
+  return statusCheck;
 };
 
-module.exports = { postToMl, mlFailure, wakeMl };
+module.exports = { postToMl, mlFailure, mlIsReady };
